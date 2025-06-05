@@ -1,10 +1,28 @@
 
 pub struct CPU {
     pub register_a: u8,
-    pub register_x: u8, //8-bit (numero de 0 a 255), ja q o processador do nintendiho é 8bit
+    pub register_x: u8,
+    pub register_y: u8, //8-bit (numero de 0 a 255), ja q o processador do nintendiho é 8bit
     pub status: u8, //registrador que guarda "flags" que indicam o resultado de operações anteriores
     pub program_counter: u16,
     memory: [u8; 0xFFFF]
+}
+#[derive(Debug)]
+#[allow(non_camel_case_types)]
+pub enum AdressingMode {
+    Immediate,
+    ZeroPage,
+    Absolute,
+    ZeroPage_X,
+    ZeroPage_Y,
+
+    Absolute_X,
+    Absolute_Y,
+
+    Indirect_X,
+    Indirect_Y,
+
+    NoneAdressing,
 }
 
 impl CPU {
@@ -12,9 +30,69 @@ impl CPU {
         CPU {
             register_a: 0,
             register_x: 0,
+            register_y: 0,
             status: 0,
             program_counter: 0,
             memory: [0; 0xFFFF]
+        }
+    }
+
+    fn get_oprand_adress(&mut self, mode: &AdressingMode) -> u16 {
+        //função de ver o parametro e procurar o valor no
+        // lugar que esta de acordo com o parametro coreespondente, por exemplo,
+        // se o parametro for pra procurar o proximo valor imeditato, ou se for pra
+        // procurar em um endereço de memoria u8 ou u16
+
+        match mode {
+            AdressingMode::Immediate => self.program_counter, //pega o proximo imediato e joga na memoria (no register A)
+
+            AdressingMode::ZeroPage => self.mem_read(self.program_counter) as u16, //
+
+            AdressingMode::Absolute => self.mem_read_u16(self.program_counter),
+
+            AdressingMode::ZeroPage_X => {
+                let pos = self.mem_read(self.program_counter);
+                let addr = pos.wrapping_add(self.register_x) as u16;
+                addr
+            }
+            AdressingMode::ZeroPage_Y => {
+                let pos = self.mem_read(self.program_counter);
+                let addr = pos.wrapping_add(self.register_y) as u16;
+                addr
+            }
+            AdressingMode::Absolute_X => {
+                let base = self.mem_read_u16(self.program_counter);
+                let addr = base.wrapping_add(self.register_x as u16);
+                addr
+            }
+            AdressingMode::Absolute_Y => {
+                let base = self.mem_read_u16(self.program_counter);
+                let addr = base.wrapping_add(self.register_y as u16);
+                addr
+            }
+            AdressingMode::Indirect_X => {
+                let base = self.mem_read(self.program_counter);
+
+                let ptr: u8 = (base as u8).wrapping_add(self.register_x);
+                let lo = self.mem_read(ptr as u16);
+                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
+                (hi as u16) << 8 | (lo as u16)
+            }
+            AdressingMode::Indirect_Y => {
+                let base = self.mem_read(self.program_counter);
+
+                let lo = self.mem_read(base as u16);
+                let hi = self.mem_read(base.wrapping_add(1) as u16);
+                let deref_base = (hi as u16) << 8 | (lo as u16);
+                let deref = deref_base.wrapping_add(self.register_y as u16);
+
+                deref
+            }
+
+            AdressingMode::NoneAdressing => {
+                panic!("mode {:?} is not suported", mode);
+            }
+
         }
     }
 
@@ -58,9 +136,17 @@ impl CPU {
     }
 
     // comandos de processamento de bits e funções do processador
-    fn lda(&mut self, value:u8) {
-        self.register_a = value;
-        self.update_zero_and_negative_flags(self.register_a);
+    fn lda(&mut self, mode: &AdressingMode) {
+        let addr = self.get_oprand_adress(mode); //VÊ salva qual é o modo correspondente da operação que chamou, e salva o resultado
+        //se for por exemplo Immidiate, ele retorna o match do imidiate, ou seja, seria o proprio program counter
+        // que no caso é imediata proxima instrução da maquina
+
+        let value = self.mem_read(addr); //lê o resultado do match, que por exemplo, em imidiate, seria o program counter
+        // entao ele lê o valor do program counter e salva na variavel value
+
+        //agora que ele ja procurou e salvou qual é o valor ele vai registrar ele
+        self.register_a = value;//registra o value no registrador A, afinal é isso que o comando LDA faz
+        self.update_zero_and_negative_flags(self.register_a);//update nas flags
     }
     fn tax(&mut self) {
         self.register_x = self.register_a;
@@ -97,10 +183,45 @@ impl CPU {
             match opscode{
                 0xA9 => { // um dos comandos, em codigo de maquina, no caso o LDA, do assembly, que server para inserir um valor na memoria
                     // load acumulator(LDA), carregando o valor que vem imediatamente a seguir
-                    let param = self.mem_read(self.program_counter); //le e armazena o byte seguinte ao opcode
-                    self.program_counter += 1;
-                    self.lda(param);
+                    //let param = self.mem_read(self.program_counter); //le e armazena o byte seguinte ao opcode
+                    //self.program_counter += 1;
+                    //self.lda(param);
+
+                    self.lda(&AdressingMode::Immediate);    //imidiate
+                    self.program_counter +=1;//endereço u8, ou seja 1byte, entao passa um byte só
                 }
+                0xA5 => {
+                    self.lda(&AdressingMode::ZeroPage);     //zero page
+                    self.program_counter += 1;
+                }
+                0xB5 => {
+                    self.lda(&AdressingMode::ZeroPage_X);   //zero page x
+                    self.program_counter += 1;
+                }
+                0xAD => {
+                    self.lda(&AdressingMode::Absolute);     //absolute
+                    self.program_counter += 2;//passa 2 bytes pq ele ja passou um endereço u16
+                }
+                0xBD => {
+                    self.lda(&AdressingMode::Absolute_X);
+                    self.program_counter += 2;
+                }
+
+                0xB9 => {
+                    self.lda(&AdressingMode::Absolute_Y);
+                    self.program_counter += 2;
+                }
+                0xA1 => {
+                    self.lda(&AdressingMode::Indirect_X);
+                    self.program_counter += 1;
+                }
+
+                0xB1 => {
+                    self.lda(&AdressingMode::Indirect_Y);
+                    self.program_counter += 1;
+                }
+
+
                 0xAA => { //opcode que passa o valor do registrador A para o registrador X
                     self.tax();
                 }
