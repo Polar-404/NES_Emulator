@@ -1,3 +1,5 @@
+use crate::opcodes;
+use std::collections::HashMap;
 
 pub struct CPU {
     pub register_a: u8,
@@ -9,20 +11,20 @@ pub struct CPU {
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
-pub enum AdressingMode {
+pub enum AddressingMode {
     Immediate,
     ZeroPage,
     Absolute,
     ZeroPage_X,
     ZeroPage_Y,
 
-    Absolute_X,
+    Absolute_X, 
     Absolute_Y,
 
     Indirect_X,
     Indirect_Y,
 
-    NoneAdressing,
+    NoneAddressing,
 }
 
 impl CPU {
@@ -37,40 +39,40 @@ impl CPU {
         }
     }
 
-    fn get_oprand_adress(&mut self, mode: &AdressingMode) -> u16 {
+    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
         //função de ver o parametro e procurar o valor no
         // lugar que esta de acordo com o parametro coreespondente, por exemplo,
         // se o parametro for pra procurar o proximo valor imeditato, ou se for pra
         // procurar em um endereço de memoria u8 ou u16
 
         match mode {
-            AdressingMode::Immediate => self.program_counter, //pega o proximo imediato e joga na memoria (no register A)
+            AddressingMode::Immediate => self.program_counter, //pega o proximo imediato e joga na memoria (no register A)
 
-            AdressingMode::ZeroPage => self.mem_read(self.program_counter) as u16, //
+            AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16, //
 
-            AdressingMode::Absolute => self.mem_read_u16(self.program_counter),
+            AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
 
-            AdressingMode::ZeroPage_X => {
+            AddressingMode::ZeroPage_X => {
                 let pos = self.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_x) as u16;
                 addr
             }
-            AdressingMode::ZeroPage_Y => {
+            AddressingMode::ZeroPage_Y => {
                 let pos = self.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_y) as u16;
                 addr
             }
-            AdressingMode::Absolute_X => {
+            AddressingMode::Absolute_X => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
                 addr
             }
-            AdressingMode::Absolute_Y => {
+            AddressingMode::Absolute_Y => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
-            AdressingMode::Indirect_X => {
+            AddressingMode::Indirect_X => {
                 let base = self.mem_read(self.program_counter);
 
                 let ptr: u8 = (base as u8).wrapping_add(self.register_x);
@@ -78,7 +80,7 @@ impl CPU {
                 let hi = self.mem_read(ptr.wrapping_add(1) as u16);
                 (hi as u16) << 8 | (lo as u16)
             }
-            AdressingMode::Indirect_Y => {
+            AddressingMode::Indirect_Y => {
                 let base = self.mem_read(self.program_counter);
 
                 let lo = self.mem_read(base as u16);
@@ -89,7 +91,7 @@ impl CPU {
                 deref
             }
 
-            AdressingMode::NoneAdressing => {
+            AddressingMode::NoneAddressing => {
                 panic!("mode {:?} is not suported", mode);
             }
 
@@ -136,7 +138,7 @@ impl CPU {
     }
 
     // comandos de processamento de bits e funções do processador
-    fn lda(&mut self, mode: &AdressingMode) {
+    fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode); //VÊ salva qual é o modo correspondente da operação que chamou, e salva o resultado
         //se for por exemplo Immidiate, ele retorna o match do imidiate, ou seja, seria o proprio program counter
         // que no caso é imediata proxima instrução da maquina
@@ -148,6 +150,12 @@ impl CPU {
         self.register_a = value;//registra o value no registrador A, afinal é isso que o comando LDA faz
         self.update_zero_and_negative_flags(self.register_a);//update nas flags
     }
+    fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
+        //mas esse escreve o que esta no register na memoria
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -174,64 +182,28 @@ impl CPU {
 
     //funções de processar/intepretar codigo
     pub fn run(&mut self) {// mut self para poder alterar os valores da struct cpu, por ex, register a
-
+        let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
         loop {
-            let opscode = self.mem_read(self.program_counter); // lê e armazena o byte do program no 
-            //indice do contador para passar para o processamento
-            self.program_counter += 1; // passa para o proximo byte do programa, para executar o proximo comando
+            let code = self.mem_read(self.program_counter);
+            self.program_counter += 1;
+            let program_counter_state = self.program_counter;
+            let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido", code));
 
-            match opscode{
-                0xA9 => { // um dos comandos, em codigo de maquina, no caso o LDA, do assembly, que server para inserir um valor na memoria
-                    // load acumulator(LDA), carregando o valor que vem imediatamente a seguir
-                    //let param = self.mem_read(self.program_counter); //le e armazena o byte seguinte ao opcode
-                    //self.program_counter += 1;
-                    //self.lda(param);
-
-                    self.lda(&AdressingMode::Immediate);    //imidiate
-                    self.program_counter +=1;//endereço u8, ou seja 1byte, entao passa um byte só
+            match code{
+                //LDA
+                0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
+                    self.lda(&opcode.mode);
                 }
-                0xA5 => {
-                    self.lda(&AdressingMode::ZeroPage);     //zero page
-                    self.program_counter += 1;
+                0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
+                    self.sta(&opcode.mode);
                 }
-                0xB5 => {
-                    self.lda(&AdressingMode::ZeroPage_X);   //zero page x
-                    self.program_counter += 1;
-                }
-                0xAD => {
-                    self.lda(&AdressingMode::Absolute);     //absolute
-                    self.program_counter += 2;//passa 2 bytes pq ele ja passou um endereço u16
-                }
-                0xBD => {
-                    self.lda(&AdressingMode::Absolute_X);
-                    self.program_counter += 2;
-                }
-
-                0xB9 => {
-                    self.lda(&AdressingMode::Absolute_Y);
-                    self.program_counter += 2;
-                }
-                0xA1 => {
-                    self.lda(&AdressingMode::Indirect_X);
-                    self.program_counter += 1;
-                }
-
-                0xB1 => {
-                    self.lda(&AdressingMode::Indirect_Y);
-                    self.program_counter += 1;
-                }
-
-
-                0xAA => { //opcode que passa o valor do registrador A para o registrador X
-                    self.tax();
-                }
-                0xE8 => {// opcode que adiciona 1 ao register X
-                    self.inx();
-                }
-                0x00 => { //opcode para dar break no loop/desligar a maquina
-                    return;
-                }
+                0xAA => self.tax(),
+                0xe8 => self.inx(),
+                0x00 => return,
                 _ => todo!()
+            }
+            if program_counter_state == self.program_counter {
+                self.program_counter += (opcode.len -1) as u16;
             }
         }
     }
@@ -279,5 +251,14 @@ mod test {
         cpu.mem_write_u16(0x80ff, 0xef);
 
         assert_eq!(cpu.memory[0x80ff], 0xef);
+    }
+    #[test]
+    fn test_lda_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x55);
+
+        cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
+        assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
+        //de memoria 0x10, e dps break
     }
 }
