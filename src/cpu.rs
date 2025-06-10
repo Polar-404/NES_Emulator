@@ -15,10 +15,11 @@ pub enum AddressingMode {
     Immediate,
     ZeroPage,
     Absolute,
+
     ZeroPage_X,
     ZeroPage_Y,
 
-    Absolute_X, 
+    Absolute_X,
     Absolute_Y,
 
     Indirect_X,
@@ -46,7 +47,8 @@ impl CPU {
         // procurar em um endereço de memoria u8 ou u16
 
         match mode {
-            AddressingMode::Immediate => self.program_counter, //pega o proximo imediato e joga na memoria (no register A)
+            AddressingMode::Immediate => self.program_counter, //pega o proximo imediato proximo valor
+            //e joga na memoria (no register A)
 
             AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16, //
 
@@ -113,7 +115,7 @@ impl CPU {
         self.run()
     }
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
+        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]); //copia de src: program para self: memory
         self.mem_write_u16(0xFFFC,0x8000);
     }
 
