@@ -1,3 +1,5 @@
+use bitflags::Flags;
+
 use crate::opcodes;
 use std::collections::HashMap;
 
@@ -191,7 +193,9 @@ impl CPU {
     fn cli(&mut self) {
         self.status.remove(CpuFlags::INTERRUPT_DISABLE);
     }
-    
+    fn clv(&mut self) {
+        self.status.remove(CpuFlags::OVERFLOW);
+    }
 
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
     /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
