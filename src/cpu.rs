@@ -189,14 +189,18 @@ impl CPU {
     ///limpa o CARRY flag
     fn clc(&mut self) {
         self.status.remove(CpuFlags::CARRY)
+    }    
+    ///SED - Set Decimal
+    fn sed(&mut self) {
+        self.status.insert(CpuFlags::DECIMAL_MODE);
     }
     ///limpa o DECIMAL_MODE flag
     fn cld(&mut self) {
         self.status.remove(CpuFlags::DECIMAL_MODE);
     }
-    ///SED - Set Decimal
-    fn sed(&mut self) {
-        self.status.insert(CpuFlags::DECIMAL_MODE);
+    ///SEI - Set Interrupt Disable
+    fn sei(&mut self) {
+        self.status.insert(CpuFlags::INTERRUPT_DISABLE);
     }
     ///limpa o INTERRUPT_DISABLE flag
     fn cli(&mut self) {
