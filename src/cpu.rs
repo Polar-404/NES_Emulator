@@ -1,5 +1,3 @@
-use bitflags::Flags;
-
 use crate::opcodes;
 use std::collections::HashMap;
 
@@ -184,7 +182,11 @@ impl CPU {
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
-     ///limpa o CARRY flag
+    ///SEC - Set Carry
+    fn sec(&mut self) {
+        self.status.insert(CpuFlags::CARRY);
+    }
+    ///limpa o CARRY flag
     fn clc(&mut self) {
         self.status.remove(CpuFlags::CARRY)
     }
