@@ -1,11 +1,31 @@
+use bitflags::Flags;
+
 use crate::opcodes;
 use std::collections::HashMap;
+
+bitflags! {
+    //bit flags para melhorar/automatizar o set e reset das flags
+    #[derive(Debug)]
+    pub struct CpuFlags: u8 {
+        const CARRY             = 0b00000001;
+        const ZERO              = 0b00000010;
+        const INTERRUPT_DISABLE = 0b00000100;
+        const DECIMAL_MODE      = 0b00001000; // nao é usado no NES
+        const BREAK             = 0b00010000;
+        const BREAK2            = 0b00100000;
+        const OVERFLOW          = 0b01000000;
+        const NEGATIVE          = 0b10000000;
+    }
+}
+
+const STACK: u16 = 0x0100;
+const STACK_RESET: u8 = 0xfd;
 
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendiho é 8bit
-    pub status: u8, //registrador que guarda "flags" que indicam o resultado de operações anteriores
+    pub status: CpuFlags, //registrador que guarda "flags" que indicam o resultado de operações anteriores
     pub program_counter: u16,
     memory: [u8; 0xFFFF]
 }
@@ -34,7 +54,7 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: 0,
+            status: CpuFlags::from_bits_truncate(0b100100),
             program_counter: 0,
             memory: [0; 0xFFFF]
         }
@@ -121,7 +141,7 @@ impl CPU {
     pub fn reset_interrupt(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
-        self.status = 0;
+        self.status = CpuFlags::from_bits_truncate(0b100100);
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
@@ -164,11 +184,22 @@ impl CPU {
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
-
-    // ///limpa o CARRY flag
-    //fn clc(&mut self) {
-    //    self.status = self.status & 0b0000_0001
-    //}
+     ///limpa o CARRY flag
+    fn clc(&mut self) {
+        self.status.remove(CpuFlags::CARRY)
+    }
+    ///limpa o DECIMAL_MODE flag
+    fn cld(&mut self) {
+        self.status.remove(CpuFlags::DECIMAL_MODE);
+    }
+    ///limpa o INTERRUPT_DISABLE flag
+    fn cli(&mut self) {
+        self.status.remove(CpuFlags::INTERRUPT_DISABLE);
+    }
+    ///limpa o OVERFLOW flag
+    fn clv(&mut self) {
+        self.status.remove(CpuFlags::OVERFLOW);
+    }
 
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
     /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
@@ -178,12 +209,17 @@ impl CPU {
         let val = self.mem_read(addr);
 
         let sum = self.register_a as u16 + val as u16 
-        + (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
-        
-        if sum > 0xff { //seta a carry flag
-            self.status = self.status | 0b0000_0001; 
+        //+ (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
+        + (if self.status.contains(CpuFlags::CARRY) {
+            1
         } else {
-            self.status = self.status & 0b1111_1110;
+            0
+        });
+
+        if sum > 0xff { //seta a carry flag
+            self.status.insert(CpuFlags::CARRY); 
+        } else {
+            self.status.remove(CpuFlags::CARRY);
         }
         
         let result = sum as u8;
@@ -192,9 +228,9 @@ impl CPU {
             //usa os operadores logicos de XOR para verificar quais bits sao diferentes e dps verifica com 0b100...
             //já q é o bit que quer ser verificado(o unico bit q importa)... se for diferente dos outros significa que
             //ocorreu um overflow, 
-            self.status = self.status | 0b0100_0000
+            self.status.insert(CpuFlags::OVERFLOW);
         } else {
-            self.status = self.status & 0b1011_1111
+            self.status.remove(CpuFlags::OVERFLOW);
         }
         self.register_a = result;
         self.update_zero_and_negative_flags(self.register_a);
@@ -212,15 +248,15 @@ impl CPU {
     fn update_zero_and_negative_flags(&mut self, result:u8) {
         if result == 0 { // serve para atualizar o zero flag
             //se o valor do registrador A(valor da ultima op) for zero, ele liga o zero flag, significa q n tem uma flag no comando
-            self.status = self.status | 0b0000_0010; // X ou 1  = 1, essa operação seta o zero flag
+            self.status.insert(CpuFlags::ZERO); // X ou 1  = 1, essa operação seta o zero flag
         }else {
-            self.status = self.status & 0b1111_1101; // X ou 0 = 0, tem todos os 
+            self.status.remove(CpuFlags::ZERO); // X ou 0 = 0, tem todos os 
             //bits com 1, exceto o Zero flag, essa operaçao desliga o zero flag
         }
         if self.register_a & 0b1000_0000 != 0 { //mesma coisa que o de cima, mas para o negative flag
-            self.status = self.status | 0b1000_0000; 
+            self.status.insert(CpuFlags::NEGATIVE); 
         }else {
-            self.status = self.status & 0b0111_1111; 
+            self.status.remove(CpuFlags::NEGATIVE); 
         }
     }
 
@@ -245,6 +281,12 @@ impl CPU {
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
+                //CLEAR
+                0x18 => self.clc(),
+                0xD8 => self.cld(),
+                0x58 => self.cli(),
+                0xB8 => self.clv(),
+
 
                 0xAA => self.tax(),
                 0xe8 => self.inx(),
@@ -263,43 +305,22 @@ mod test {
 
     use super::*; //importa/herda tudo do modulo pai
 
+    // ------------------- LDA ------------------
     #[test]
     fn test_0xa9_lda_immediato() {
         let mut cpu = CPU::new();
 
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.register_a, 0x05);
-        assert!(cpu.status & 0b0000_0010 == 0b00);
-        assert!(cpu.status & 0b1000_0000 == 0);
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIVE));
     }
     #[test]
     fn test_0xa9_lda_zero_flag() {
         let mut cpu = CPU::new();
 
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
-        assert!(cpu.status & 0b0000_0010 == 0b10);
-    }
-    #[test]
-    fn test_0xaa_tax() {
-        let mut cpu = CPU::new();
-
-        cpu.load_and_run(vec![0xa9, 0x0a, 0xAA, 0x00]); //primeiro inserir LDA, no register A, o valor 0x0a(q é 10)
-        //depois coloca esse valor no register x como comando TAX (0xAA), depois break
-        assert_eq!(cpu.register_x, 10)
-    }
-    #[test]
-    fn test_0xe8_inx() {
-        let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xE8, 0x00]);
-
-        assert_eq!(cpu.register_x, 1)
-    }
-    #[test]
-    fn test_write_mem() {
-        let mut cpu = CPU::new();
-        cpu.mem_write_u16(0x80ff, 0xef);
-
-        assert_eq!(cpu.memory[0x80ff], 0xef);
+        assert!(cpu.status.contains(CpuFlags::ZERO));
     }
     #[test]
     fn test_lda_from_memory() {
@@ -310,7 +331,35 @@ mod test {
         assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
         //de memoria 0x10, e dps break
     }
+
+    // ------------------- TAX ------------------
     #[test]
+    fn test_0xaa_tax() {
+        let mut cpu = CPU::new();
+
+        cpu.load_and_run(vec![0xa9, 0x0a, 0xAA, 0x00]); //primeiro inserir LDA, no register A, o valor 0x0a(q é 10)
+        //depois coloca esse valor no register x como comando TAX (0xAA), depois break
+        assert_eq!(cpu.register_x, 10)
+    }
+    // ------------------- INX ------------------
+    #[test]
+    fn test_0xe8_inx() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xE8, 0x00]);
+
+        assert_eq!(cpu.register_x, 1)
+    }
+    // --------------- WRITE MEMORY --------------------
+    #[test]
+    fn test_write_mem() {
+        let mut cpu = CPU::new();
+        cpu.mem_write_u16(0x80ff, 0xef);
+
+        assert_eq!(cpu.memory[0x80ff], 0xef);
+    }
+
+    #[test]
+    // -------------------- ADC ------------------------
     fn test_adc_from_immediate() {
         let mut cpu = CPU::new();
         //cpu.mem_write(0x69, data);
@@ -336,7 +385,48 @@ mod test {
         cpu.mem_write(0x10, 0xff);
         cpu.mem_write(0x20, 0x01);
         cpu.load_and_run(vec![0xa5, 0x10, 0x65, 0x20, 0x00]);
-        assert_eq!(cpu.register_a, 0x0);
-        assert!((cpu.status & 0b0000_0010) != 0); //carry flag foi setada
+        assert_eq!(cpu.register_a, 0x00);
+
+        assert!(cpu.status.contains(CpuFlags::ZERO)); //zero flag foi setada
+        assert!(cpu.status.contains(CpuFlags::CARRY)); //carry flag foi setada
+    }
+    #[test]
+    fn test_adc_carry_sum() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0xff);
+        cpu.mem_write(0x20, 0x01);
+        cpu.load_and_run(vec![0xa5, 0x10, 0x65, 0x20, 0x69, 0x50, 0x00]);
+
+        assert!(!cpu.status.contains(CpuFlags::ZERO)); //zero flag foi desligada
+        assert!(!cpu.status.contains(CpuFlags::ZERO)); //carry flag foi desligada
+
+        assert_eq!(cpu.register_a, 0x51);
+    }
+    #[test]
+    fn test_clear_flags() {
+        //const CARRY             = 0b00000001;
+        //const ZERO              = 0b00000010;
+        //const INTERRUPT_DISABLE = 0b00000100;
+        //const DECIMAL_MODE      = 0b00001000; 
+        //const BREAK             = 0b00010000;
+        //const BREAK2            = 0b00100000;
+        //const OVERFLOW          = 0b01000000;
+        //const NEGATIVE          = 0b10000000;
+
+        let mut cpu = CPU::new();
+        cpu.status = CpuFlags::from_bits_truncate(0b0100_1101);
+
+        //respectivamente [clc, cld, cli, clv]
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+        assert!(cpu.status.contains(CpuFlags::OVERFLOW));
+
+        cpu.clc(); cpu.cld(); cpu.cli(); cpu.clv();
+
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(!cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+        assert!(!cpu.status.contains(CpuFlags::OVERFLOW));
     }
 }
