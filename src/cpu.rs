@@ -444,4 +444,14 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
         assert!(!cpu.status.contains(CpuFlags::OVERFLOW));
     }
+
+    #[test]
+    fn test_set_flags() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x38, 0xF8, 0x78]);
+
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+    }
 }
