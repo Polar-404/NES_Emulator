@@ -185,6 +185,9 @@ impl CPU {
     fn clc(&mut self) {
         self.status.remove(CpuFlags::CARRY)
     }
+    fn cld(&mut self) {
+        self.status.remove(CpuFlags::DECIMAL_MODE);
+    }
 
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
     /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
