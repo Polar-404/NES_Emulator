@@ -4,7 +4,7 @@ use std::collections::HashMap;
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
-    pub register_y: u8, //8-bit (numero de 0 a 255), ja q o processador do nintendiho é 8bit
+    pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendiho é 8bit
     pub status: u8, //registrador que guarda "flags" que indicam o resultado de operações anteriores
     pub program_counter: u16,
     memory: [u8; 0xFFFF]
@@ -41,7 +41,7 @@ impl CPU {
     }
 
     fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
-        //função de ver o parametro e procurar o valor no
+        // função de ver o parametro e procurar o valor no
         // lugar que esta de acordo com o parametro coreespondente, por exemplo,
         // se o parametro for pra procurar o proximo valor imeditato, ou se for pra
         // procurar em um endereço de memoria u8 ou u16
@@ -99,7 +99,6 @@ impl CPU {
 
         }
     }
-
     // comandos de controle de memoria
     fn mem_read(&self, addr: u16) -> u8 {
         self.memory[addr as usize]
@@ -132,21 +131,29 @@ impl CPU {
         let hi = self.mem_read(pos + 1) as u16;
         (hi << 8) | (lo as u16)
     }
+    ///pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
+    /// 
+    ///depois pega somente os bits menos significativos, os outros seram setados como 0... depois escreve na ordem inversa
+    /// 
+    /// escrevendo então em little endian
     fn mem_write_u16(&mut self, pos: u16, data: u16) {
-        let hi = (data >> 8) as u8;
-        let lo = (data & 0xff) as u8;
+        let hi = (data >> 8) as u8; //pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
+        let lo = (data & 0xff) as u8; //pega somente os bits menos significativos, os outros seram setados como 0
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
     }
 
-    // comandos de processamento de bits e funções do processador
+    // -------------comandos de processamento de bits e funções do processador--------------
+
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode); //VÊ salva qual é o modo correspondente da operação que chamou, e salva o resultado
         //se for por exemplo Immidiate, ele retorna o match do imidiate, ou seja, seria o proprio program counter
         // que no caso é imediata proxima instrução da maquina
 
-        let value = self.mem_read(addr); //lê o resultado do match, que por exemplo, em imidiate, seria o program counter
-        // entao ele lê o valor do program counter e salva na variavel value
+        let value = self.mem_read(addr); //lê o resultado do match, que por exemplo, em immediate, seria o program counter
+        // então ele lê o valor do program counter e salva na variavel value
+
+        // em outras palavras addr(address) é o endereço, value simplesmente é o valor que esta naquele endereço
 
         //agora que ele ja procurou e salvou qual é o valor ele vai registrar ele
         self.register_a = value;//registra o value no registrador A, afinal é isso que o comando LDA faz
@@ -156,6 +163,41 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
+    }
+
+    // ///limpa o CARRY flag
+    //fn clc(&mut self) {
+    //    self.status = self.status & 0b0000_0001
+    //}
+
+    /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
+    /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
+    /// depois finaliza o comando passando o resultado para o registrador A e dando update nas flags ZERO e NEGATIVE
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let val = self.mem_read(addr);
+
+        let sum = self.register_a as u16 + val as u16 
+        + (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
+        
+        if sum > 0xff { //seta a carry flag
+            self.status = self.status | 0b0000_0001; 
+        } else {
+            self.status = self.status & 0b1111_1110;
+        }
+        
+        let result = sum as u8;
+
+        if (result ^ val) & (result ^ self.register_a) & 0b1000_0000 != 0 { //seta a overflow flag
+            //usa os operadores logicos de XOR para verificar quais bits sao diferentes e dps verifica com 0b100...
+            //já q é o bit que quer ser verificado(o unico bit q importa)... se for diferente dos outros significa que
+            //ocorreu um overflow, 
+            self.status = self.status | 0b0100_0000
+        } else {
+            self.status = self.status & 0b1011_1111
+        }
+        self.register_a = result;
+        self.update_zero_and_negative_flags(self.register_a);
     }
 
     fn tax(&mut self) {
@@ -172,7 +214,7 @@ impl CPU {
             //se o valor do registrador A(valor da ultima op) for zero, ele liga o zero flag, significa q n tem uma flag no comando
             self.status = self.status | 0b0000_0010; // X ou 1  = 1, essa operação seta o zero flag
         }else {
-            self.status = self.status | 0b1111_1101; // X ou 0 = 0, tem todos os 
+            self.status = self.status & 0b1111_1101; // X ou 0 = 0, tem todos os 
             //bits com 1, exceto o Zero flag, essa operaçao desliga o zero flag
         }
         if self.register_a & 0b1000_0000 != 0 { //mesma coisa que o de cima, mas para o negative flag
@@ -194,11 +236,16 @@ impl CPU {
             match code{
                 //LDA
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
+                    //cada uma das instruções representa o comando LDA mas como flags diferentes
                     self.lda(&opcode.mode);
                 }
                 0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
                     self.sta(&opcode.mode);
                 }
+                0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
+                    self.adc(&opcode.mode);
+                }
+
                 0xAA => self.tax(),
                 0xe8 => self.inx(),
                 0x00 => return,
@@ -262,5 +309,34 @@ mod test {
         cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
         assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
         //de memoria 0x10, e dps break
+    }
+    #[test]
+    fn test_adc_from_immediate() {
+        let mut cpu = CPU::new();
+        //cpu.mem_write(0x69, data);
+        cpu.load_and_run(vec![0x69, 0x10, 0x69, 0x32]);
+        assert_eq!(cpu.register_a, 0x42);
+    }
+    #[test]
+    fn test_adc_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0xab); //carrega 0xab
+        cpu.mem_write(0x20, 0x05); //carrega 0x02
+
+        //le o 0xf5, dps le o 0x31
+        cpu.load_and_run(vec![
+        0xa5, 0x10, // LDA ZeroPage, operando 0x10
+        0x65, 0x20, // ADC ZeroPage, operando 0x20
+        0x00]);      // BRK]);
+        assert_eq!(cpu.register_a, 0xb0)
+    }
+    #[test]
+    fn test_adc_carry_flag() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0xff);
+        cpu.mem_write(0x20, 0x01);
+        cpu.load_and_run(vec![0xa5, 0x10, 0x65, 0x20, 0x00]);
+        assert_eq!(cpu.register_a, 0x0);
+        assert!((cpu.status & 0b0000_0010) != 0); //carry flag foi setada
     }
 }
