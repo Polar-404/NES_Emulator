@@ -196,11 +196,6 @@ impl CPU {
     ///SED - Set Decimal
     fn sed(&mut self) {
         self.status.insert(CpuFlags::DECIMAL_MODE);
-
-     ///limpa o CARRY flag
-    fn clc(&mut self) {
-        self.status.remove(CpuFlags::CARRY)
-
     }
     ///limpa o DECIMAL_MODE flag
     fn cld(&mut self) {
@@ -350,17 +345,6 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::ZERO));
     }
   
-    #[test]
-    fn test_lda_from_memory() {
-        let mut cpu = CPU::new();
-        cpu.mem_write(0x10, 0x55);
-
-        cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
-        assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
-        //de memoria 0x10, e dps break
-    }
-
-    // ------------------- TAX ------------------
     #[test]
     fn test_lda_from_memory() {
         let mut cpu = CPU::new();
