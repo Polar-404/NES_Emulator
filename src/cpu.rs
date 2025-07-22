@@ -291,7 +291,12 @@ impl CPU {
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
-                //CLEAR
+                //SET FLAGS
+
+                0x38 => self.sec(),
+                0xF8 => self.sed(),
+                0x78 => self.sei(),
+                //CLEAR FLAGS
                 0x18 => self.clc(),
                 0xD8 => self.cld(),
                 0x58 => self.cli(),
