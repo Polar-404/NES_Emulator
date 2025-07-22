@@ -1,3 +1,5 @@
+use bitflags::Flags;
+
 use crate::opcodes;
 use std::collections::HashMap;
 
@@ -182,6 +184,7 @@ impl CPU {
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
+
     ///SEC - Set Carry
     fn sec(&mut self) {
         self.status.insert(CpuFlags::CARRY);
@@ -193,15 +196,22 @@ impl CPU {
     ///SED - Set Decimal
     fn sed(&mut self) {
         self.status.insert(CpuFlags::DECIMAL_MODE);
+
+     ///limpa o CARRY flag
+    fn clc(&mut self) {
+        self.status.remove(CpuFlags::CARRY)
+
     }
     ///limpa o DECIMAL_MODE flag
     fn cld(&mut self) {
         self.status.remove(CpuFlags::DECIMAL_MODE);
     }
+
     ///SEI - Set Interrupt Disable
     fn sei(&mut self) {
         self.status.insert(CpuFlags::INTERRUPT_DISABLE);
     }
+
     ///limpa o INTERRUPT_DISABLE flag
     fn cli(&mut self) {
         self.status.remove(CpuFlags::INTERRUPT_DISABLE);
@@ -291,11 +301,13 @@ impl CPU {
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
+
                 //SET FLAGS
 
                 0x38 => self.sec(),
                 0xF8 => self.sed(),
                 0x78 => self.sei(),
+              
                 //CLEAR FLAGS
                 0x18 => self.clc(),
                 0xD8 => self.cld(),
@@ -337,6 +349,18 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert!(cpu.status.contains(CpuFlags::ZERO));
     }
+  
+    #[test]
+    fn test_lda_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x55);
+
+        cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
+        assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
+        //de memoria 0x10, e dps break
+    }
+
+    // ------------------- TAX ------------------
     #[test]
     fn test_lda_from_memory() {
         let mut cpu = CPU::new();
@@ -443,6 +467,7 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::DECIMAL_MODE));
         assert!(!cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
         assert!(!cpu.status.contains(CpuFlags::OVERFLOW));
+
     }
 
     #[test]
