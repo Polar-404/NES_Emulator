@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 bitflags! {
     //bit flags para melhorar/automatizar o set e reset das flags
+    #[derive(Debug)]
     pub struct CpuFlags: u8 {
         const CARRY             = 0b00000001;
         const ZERO              = 0b00000010;
@@ -187,12 +188,15 @@ impl CPU {
     fn clc(&mut self) {
         self.status.remove(CpuFlags::CARRY)
     }
+    ///limpa o DECIMAL_MODE flag
     fn cld(&mut self) {
         self.status.remove(CpuFlags::DECIMAL_MODE);
     }
+    ///limpa o INTERRUPT_DISABLE flag
     fn cli(&mut self) {
         self.status.remove(CpuFlags::INTERRUPT_DISABLE);
     }
+    ///limpa o OVERFLOW flag
     fn clv(&mut self) {
         self.status.remove(CpuFlags::OVERFLOW);
     }
@@ -397,5 +401,32 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::ZERO)); //carry flag foi desligada
 
         assert_eq!(cpu.register_a, 0x51);
+    }
+    #[test]
+    fn test_clear_flags() {
+        //const CARRY             = 0b00000001;
+        //const ZERO              = 0b00000010;
+        //const INTERRUPT_DISABLE = 0b00000100;
+        //const DECIMAL_MODE      = 0b00001000; 
+        //const BREAK             = 0b00010000;
+        //const BREAK2            = 0b00100000;
+        //const OVERFLOW          = 0b01000000;
+        //const NEGATIVE          = 0b10000000;
+
+        let mut cpu = CPU::new();
+        cpu.status = CpuFlags::from_bits_truncate(0b0100_1101);
+
+        //respectivamente [clc, cld, cli, clv]
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+        assert!(cpu.status.contains(CpuFlags::OVERFLOW));
+
+        cpu.clc(); cpu.cld(); cpu.cli(); cpu.clv();
+
+        assert!(!cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::DECIMAL_MODE));
+        assert!(!cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
+        assert!(!cpu.status.contains(CpuFlags::OVERFLOW));
     }
 }
