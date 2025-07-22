@@ -277,6 +277,12 @@ impl CPU {
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
+                //CLEAR
+                0x18 => self.clc(),
+                0xD8 => self.cld(),
+                0x58 => self.cli(),
+                0xB8 => self.clv(),
+
 
                 0xAA => self.tax(),
                 0xe8 => self.inx(),
