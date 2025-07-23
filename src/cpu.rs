@@ -185,7 +185,7 @@ impl CPU {
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
-        self.register_a = (self.register_a & data);
+        self.register_a = self.register_a & data;
     }
 
     ///SEC - Set Carry
@@ -337,6 +337,11 @@ impl CPU {
                 //CPY (COMPARE Y)
                 0xC0 | 0xC4 | 0xCC => {
                     self.compare(&opcode.mode, self.register_y);
+                }
+
+                //AND BITWISE
+                0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x31 => {
+                    self.and(&opcode.mode);
                 }
 
                 //SET FLAGS
@@ -512,5 +517,13 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::ZERO));
         assert!(cpu.status.contains(CpuFlags::CARRY));
         assert!(!cpu.status.contains(CpuFlags::NEGATIVE));
+    }
+    #[test]
+    fn test_and_instruction() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x5C); //0x5C == 0b0101_1100
+        cpu.load_and_run(vec![0xa9, 0x1A, 0x25, 0x10,]); //0x1A == 0b0001_1010
+        // and == 0b0001_1000
+        assert_eq!(cpu.register_a, 0x18);
     }
 }
