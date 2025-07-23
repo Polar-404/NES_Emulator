@@ -1,6 +1,4 @@
-use bitflags::Flags;
-
-use crate::{cpu, opcodes};
+use crate::opcodes;
 use std::collections::HashMap;
 
 bitflags! {
@@ -184,6 +182,11 @@ impl CPU {
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let data = self.mem_read(addr);
+        self.register_a = (self.register_a & data);
+    }
 
     ///SEC - Set Carry
     fn sec(&mut self) {
@@ -323,15 +326,15 @@ impl CPU {
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
-                //CPA
+                //CMP (COMPARE A)
                 0xC9 | 0xC5 | 0xD5 | 0xCD | 0xDD | 0xD9 | 0xC1 | 0xD1 => {
                     self.compare(&opcode.mode, self.register_a);
                 }
-                //CPX
+                //CPX (COMPARE X)
                 0xE0 | 0xE4 | 0xEC => {
                     self.compare(&opcode.mode, self.register_x);
                 }
-                //CPY
+                //CPY (COMPARE Y)
                 0xC0 | 0xC4 | 0xCC => {
                     self.compare(&opcode.mode, self.register_y);
                 }
@@ -489,7 +492,6 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::DECIMAL_MODE));
         assert!(!cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
         assert!(!cpu.status.contains(CpuFlags::OVERFLOW));
-
     }
 
     #[test]
@@ -502,7 +504,7 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
     }
     #[test]
-    fn test_cp_instrucitons() {
+    fn test_compare() {
         let mut cpu = CPU::new();
         cpu.mem_write(0x10, 0x2f);
         cpu.load_and_run(vec![0xa9, 0x2f, 0xC5, 0x10,]);
