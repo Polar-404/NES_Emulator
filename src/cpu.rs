@@ -187,7 +187,7 @@ impl CPU {
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
     }
-    
+
     // ASL - Arithmetic Shift Left
     fn asl(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
@@ -358,6 +358,11 @@ impl CPU {
                 //AND BITWISE
                 0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x31 => {
                     self.and(&opcode.mode);
+                }
+
+                //ASL - Arithmetic Shift Left
+                0x0A | 0x06 | 0x16 | 0x0E | 0x1E => { 
+                    self.asl(&opcode.mode);
                 }
 
                 //SET FLAGS
@@ -541,5 +546,12 @@ mod test {
         cpu.load_and_run(vec![0xa9, 0x1A, 0x25, 0x10,]); //0x1A == 0b0001_1010
         // and == 0b0001_1000
         assert_eq!(cpu.register_a, 0x18);
+    }
+    #[test]
+    fn test_asl_instruction() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0b0001_0000);
+        cpu.load_and_run(vec![0x06, 0x10]);
+        assert_eq!(cpu.mem_read(0x10), 0b0010_0000);
     }
 }
