@@ -187,6 +187,22 @@ impl CPU {
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
     }
+    
+    // ASL - Arithmetic Shift Left
+    fn asl(&mut self, mode: &AddressingMode) -> u8 {
+        let addr = self.get_oprand_adress(mode);
+        let mut data = self.mem_read(addr);
+        if data >> 7 == 1 {
+            self.status.insert(CpuFlags::CARRY);
+        }
+        else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data << 1;
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+        return data
+    }
 
     ///SEC - Set Carry
     fn sec(&mut self) {
