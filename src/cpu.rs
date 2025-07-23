@@ -1,6 +1,6 @@
 use bitflags::Flags;
 
-use crate::opcodes;
+use crate::{cpu, opcodes};
 use std::collections::HashMap;
 
 bitflags! {
@@ -214,6 +214,31 @@ impl CPU {
     ///limpa o OVERFLOW flag
     fn clv(&mut self) {
         self.status.remove(CpuFlags::OVERFLOW);
+    }
+
+    fn cpx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let mem_val = self.mem_read(addr);
+
+        if self.register_x >= mem_val {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        let result = self.register_x.wrapping_sub(mem_val);
+
+        if result == 0 {
+            self.status.insert(CpuFlags::ZERO);
+        } else {
+            self.status.remove(CpuFlags::ZERO);
+        }
+
+        if (result & 0b1000_0000) != 0 {
+            self.status.insert(CpuFlags::NEGATIVE);
+        } else {
+            self.status.remove(CpuFlags::NEGATIVE);
+        }
     }
 
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
