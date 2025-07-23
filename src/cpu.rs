@@ -501,4 +501,14 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::DECIMAL_MODE));
         assert!(cpu.status.contains(CpuFlags::INTERRUPT_DISABLE));
     }
+    #[test]
+    fn test_cp_instrucitons() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x2f);
+        cpu.load_and_run(vec![0xa9, 0x2f, 0xC5, 0x10,]);
+
+        assert!(cpu.status.contains(CpuFlags::ZERO));
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert!(!cpu.status.contains(CpuFlags::NEGATIVE));
+    }
 }
