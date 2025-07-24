@@ -182,6 +182,20 @@ impl CPU {
         self.register_a = value;//registra o value no registrador A, afinal é isso que o comando LDA faz
         self.update_zero_and_negative_flags(self.register_a);//update nas flags
     }
+    fn ldx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let val = self.mem_read(addr);
+
+        self.register_x = val;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+    fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let val = self.mem_read(addr);
+
+        self.register_y = val;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
@@ -398,7 +412,13 @@ impl CPU {
                 0xD8 => self.cld(),
                 0x58 => self.cli(),
                 0xB8 => self.clv(),
-                
+
+                0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
+                    self.ldx(&opcode.mode);
+                }
+                0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
+                    self.ldy(&opcode.mode);
+                }
                 //TAX
                 0xAA => self.tax(),
 
@@ -446,6 +466,25 @@ mod test {
 
         cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
         assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
+        //de memoria 0x10, e dps break
+    }
+    #[test]
+    fn test_ldx_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x55);
+
+        cpu.load_and_run(vec![0xA6, 0x10, 0x00]);
+        assert_eq!(cpu.register_x, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
+        //de memoria 0x10, e dps break
+    }
+    
+    #[test]
+    fn test_ldy_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x55);
+
+        cpu.load_and_run(vec![0xA4, 0x10, 0x00]);
+        assert_eq!(cpu.register_y, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
         //de memoria 0x10, e dps break
     }
 
