@@ -345,6 +345,10 @@ impl CPU {
         self.register_x = self.register_x.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_x);
     }
+    fn iny(&mut self) {
+        self.register_y = self.register_y.wrapping_add(1);
+        self.update_zero_and_negative_flags(self.register_y);
+    }
 
     //funções de processar/intepretar codigo
     pub fn run(&mut self) {// mut self para poder alterar os valores da struct cpu, por ex, register a
@@ -418,7 +422,7 @@ impl CPU {
                 0x50 => self.branch_if(!self.status.contains(CpuFlags::OVERFLOW)),
                 // BVC - Branch if Overflow Set
                 0x70 => self.branch_if(self.status.contains(CpuFlags::OVERFLOW)),
-                
+
                 //SET FLAGS
                 0x38 => self.sec(),
                 0xF8 => self.sed(),
@@ -441,6 +445,9 @@ impl CPU {
 
                 //INX
                 0xe8 => self.inx(),
+
+                //INX
+                0xC8 => self.iny(),
 
                 //BRK
                 0x00 => return,
