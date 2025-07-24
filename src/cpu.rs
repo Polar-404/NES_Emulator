@@ -377,6 +377,9 @@ impl CPU {
                 0x0A | 0x06 | 0x16 | 0x0E | 0x1E => { 
                     self.asl(&opcode.mode);
                 }
+                
+
+                0x90 => self.bcc(),
 
                 //SET FLAGS
                 0x38 => self.sec(),
@@ -566,5 +569,11 @@ mod test {
         cpu.mem_write(0x10, 0b0001_0000);
         cpu.load_and_run(vec![0x06, 0x10]);
         assert_eq!(cpu.mem_read(0x10), 0b0010_0000);
+    }
+    #[test]
+    fn test_bcc_instruction() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x90, 0x03, 0x00, 0x00, 0x00, 0xa9, 0xff, 0x00 ]);
+        assert_eq!(cpu.register_a, 0xff)
     }
 }
