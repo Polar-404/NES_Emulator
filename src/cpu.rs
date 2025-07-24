@@ -234,6 +234,19 @@ impl CPU {
     fn clv(&mut self) {
         self.status.remove(CpuFlags::OVERFLOW);
     }
+    fn bcc(&mut self) {
+        if !self.status.contains(CpuFlags::CARRY) {
+            //deve ser i8 pq o range vai de -127 a 128
+            let offset = self.mem_read(self.program_counter) as i8;
+
+            // +1 para que o program conte a partir do proximo comando(ja que no momento ele esta no endereço de offset)
+            let base_addr = self.program_counter.wrapping_add(1);
+
+            let new_program_counter = base_addr.wrapping_add(offset as u16);
+
+            self.program_counter = new_program_counter;
+        }
+    }
 
     fn compare(&mut self, mode: &AddressingMode, register: u8) {
         let addr = self.get_oprand_adress(mode);
@@ -376,7 +389,7 @@ impl CPU {
                 0x58 => self.cli(),
                 0xB8 => self.clv(),
 
-
+                
                 0xAA => self.tax(),
                 0xe8 => self.inx(),
                 0x00 => return,
