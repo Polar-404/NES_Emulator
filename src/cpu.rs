@@ -154,6 +154,11 @@ impl CPU {
     ///depois pega somente os bits menos significativos, os outros seram setados como 0... depois escreve na ordem inversa
     /// 
     /// escrevendo então em little endian
+    fn update_zero_and_negative_flags(&mut self, result:u8) {
+        self.status.set(CpuFlags::ZERO, result == 0);
+        self.status.set(CpuFlags::NEGATIVE, result & 0b1000_0000 != 0);
+    }
+
     fn mem_write_u16(&mut self, pos: u16, data: u16) {
         let hi = (data >> 8) as u8; //pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
         let lo = (data & 0xff) as u8; //pega somente os bits menos significativos, os outros seram setados como 0
@@ -191,10 +196,10 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
         let modification = self.register_a & data;
-        self.update_zero_and_negative_flags(modification);
-        if (modification & 0b0010_0000) != 0 {
-            self.status.insert(CpuFlags::OVERFLOW);
-        }
+
+        self.status.set(CpuFlags::ZERO, modification == 0);
+        self.status.set(CpuFlags::NEGATIVE, data & 0b0010_0000 != 0);
+        self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
     }
 
     // ASL - Arithmetic Shift Left
@@ -328,21 +333,6 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_x);
     }
 
-    fn update_zero_and_negative_flags(&mut self, result:u8) {
-        if result == 0 { // serve para atualizar o zero flag
-            //se o valor do registrador A(valor da ultima op) for zero, ele liga o zero flag, significa q n tem uma flag no comando
-            self.status.insert(CpuFlags::ZERO); // X ou 1  = 1, essa operação seta o zero flag
-        }else {
-            self.status.remove(CpuFlags::ZERO); // X ou 0 = 0, tem todos os 
-            //bits com 1, exceto o Zero flag, essa operaçao desliga o zero flag
-        }
-        if self.register_a & 0b1000_0000 != 0 { //mesma coisa que o de cima, mas para o negative flag
-            self.status.insert(CpuFlags::NEGATIVE); 
-        }else {
-            self.status.remove(CpuFlags::NEGATIVE); 
-        }
-    }
-
     //funções de processar/intepretar codigo
     pub fn run(&mut self) {// mut self para poder alterar os valores da struct cpu, por ex, register a
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
@@ -388,6 +378,7 @@ impl CPU {
                 0x0A | 0x06 | 0x16 | 0x0E | 0x1E => { 
                     self.asl(&opcode.mode);
                 }
+
                 // BIT - Bit Test
                 0x24 | 0x2C => {
                     self.bit(&opcode.mode)
@@ -407,10 +398,14 @@ impl CPU {
                 0xD8 => self.cld(),
                 0x58 => self.cli(),
                 0xB8 => self.clv(),
-
                 
+                //TAX
                 0xAA => self.tax(),
+
+                //INX
                 0xe8 => self.inx(),
+
+                //BRK
                 0x00 => return,
                 _ => todo!()
             }
@@ -520,7 +515,7 @@ mod test {
         cpu.load_and_run(vec![0xa5, 0x10, 0x65, 0x20, 0x69, 0x50, 0x00]);
 
         assert!(!cpu.status.contains(CpuFlags::ZERO)); //zero flag foi desligada
-        assert!(!cpu.status.contains(CpuFlags::ZERO)); //carry flag foi desligada
+        assert!(!cpu.status.contains(CpuFlags::CARRY)); //carry flag foi desligada
 
         assert_eq!(cpu.register_a, 0x51);
     }
@@ -589,8 +584,11 @@ mod test {
     #[test]
     fn test_bcc_instruction() {
         let mut cpu = CPU::new();
+        // |0x38 - sec | 0x90 - bcc | 0x18 - clc |
         cpu.load_and_run(vec![0x90, 0x03, 0x00, 0x00, 0x00, 0xa9, 0xff, 0x00 ]);
-        assert_eq!(cpu.register_a, 0xff)
+        assert_eq!(cpu.register_a, 0xff);
+        cpu.load_and_run(vec![0x38, 0x90, 0x02,  0xa9, 0xab, 0x00,]);
+        assert_eq!(cpu.register_a, 0xab);
     }
     #[test]
     fn test_bit_instruction() {
