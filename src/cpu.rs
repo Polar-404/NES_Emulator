@@ -310,8 +310,7 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
 
-        let sum = self.register_a as u16 + val as u16 
-        //+ (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
+        let sum = self.register_a as u16 + val as u16  //+ (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
         + (if self.status.contains(CpuFlags::CARRY) {
             1
         } else {
@@ -362,22 +361,27 @@ impl CPU {
                     //cada uma das instruções representa o comando LDA mas como flags diferentes
                     self.lda(&opcode.mode);
                 }
+
                 //STA
                 0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
                     self.sta(&opcode.mode);
                 }
+
                 //ADC
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
                 }
+
                 //CMP (COMPARE A)
                 0xC9 | 0xC5 | 0xD5 | 0xCD | 0xDD | 0xD9 | 0xC1 | 0xD1 => {
                     self.compare(&opcode.mode, self.register_a);
                 }
+
                 //CPX (COMPARE X)
                 0xE0 | 0xE4 | 0xEC => {
                     self.compare(&opcode.mode, self.register_x);
                 }
+
                 //CPY (COMPARE Y)
                 0xC0 | 0xC4 | 0xCC => {
                     self.compare(&opcode.mode, self.register_y);
@@ -398,10 +402,23 @@ impl CPU {
                     self.bit(&opcode.mode)
                 }
 
+                // BCC - Branch if Carry Clear
                 0x90 => self.branch_if(!self.status.contains(CpuFlags::CARRY)),
+                // BCS - Branch if Carry Set
                 0xB0 => self.branch_if(self.status.contains(CpuFlags::CARRY)),
+                // BEQ - Branch if Equal
+                0xD0 => self.branch_if(!self.status.contains(CpuFlags::ZERO)),
+                // BNE - Branch if Not Equal
                 0xF0 => self.branch_if(self.status.contains(CpuFlags::ZERO)),
-
+                // BPL - Branch if Plus
+                0x10 => self.branch_if(!self.status.contains(CpuFlags::NEGATIVE)),
+                // BNE - Branch if Minus
+                0x30 => self.branch_if(self.status.contains(CpuFlags::NEGATIVE)),
+                // BVC - Branch if Overflow Clear
+                0x50 => self.branch_if(!self.status.contains(CpuFlags::OVERFLOW)),
+                // BVC - Branch if Overflow Set
+                0x70 => self.branch_if(self.status.contains(CpuFlags::OVERFLOW)),
+                
                 //SET FLAGS
                 0x38 => self.sec(),
                 0xF8 => self.sed(),
@@ -477,7 +494,7 @@ mod test {
         assert_eq!(cpu.register_x, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
         //de memoria 0x10, e dps break
     }
-    
+
     #[test]
     fn test_ldy_from_memory() {
         let mut cpu = CPU::new();
