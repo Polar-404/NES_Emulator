@@ -187,6 +187,15 @@ impl CPU {
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
     }
+    fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let data = self.mem_read(addr);
+        let modification = self.register_a & data;
+        self.update_zero_and_negative_flags(modification);
+        if (modification & 0b0010_0000) != 0 {
+            self.status.insert(CpuFlags::OVERFLOW);
+        }
+    }
 
     // ASL - Arithmetic Shift Left
     fn asl(&mut self, mode: &AddressingMode) -> u8 {
@@ -234,12 +243,14 @@ impl CPU {
     fn clv(&mut self) {
         self.status.remove(CpuFlags::OVERFLOW);
     }
-    fn bcc(&mut self) {
-        if !self.status.contains(CpuFlags::CARRY) {
+    fn branch_if(&mut self, condition: bool) {
+        if condition {
             //deve ser i8 pq o range vai de -127 a 128
+            //de forma que o programa pode tanto pular pra frente quanto pular pra trás
             let offset = self.mem_read(self.program_counter) as i8;
 
-            // +1 para que o program conte a partir do proximo comando(ja que no momento ele esta no endereço de offset)
+            // +1 para que o program conte a partir do proximo comando
+            //(ja que no momento ele esta no endereço de offset)
             let base_addr = self.program_counter.wrapping_add(1);
 
             let new_program_counter = base_addr.wrapping_add(offset as u16);
@@ -377,9 +388,14 @@ impl CPU {
                 0x0A | 0x06 | 0x16 | 0x0E | 0x1E => { 
                     self.asl(&opcode.mode);
                 }
-                
+                // BIT - Bit Test
+                0x24 | 0x2C => {
+                    self.bit(&opcode.mode)
+                }
 
-                0x90 => self.bcc(),
+                0x90 => self.branch_if(!self.status.contains(CpuFlags::CARRY)),
+                0xB0 => self.branch_if(self.status.contains(CpuFlags::CARRY)),
+                0xF0 => self.branch_if(self.status.contains(CpuFlags::ZERO)),
 
                 //SET FLAGS
                 0x38 => self.sec(),
@@ -575,5 +591,14 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0x90, 0x03, 0x00, 0x00, 0x00, 0xa9, 0xff, 0x00 ]);
         assert_eq!(cpu.register_a, 0xff)
+    }
+    #[test]
+    fn test_bit_instruction() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0xf3);
+        cpu.load_and_run(vec![0xa9, 0xf8, 0x24, 0x20]);
+        assert!(!cpu.status.contains(CpuFlags::ZERO));
+        assert!(cpu.status.contains(CpuFlags::NEGATIVE));
+        assert!(cpu.status.contains(CpuFlags::OVERFLOW));
     }
 }
