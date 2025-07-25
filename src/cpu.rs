@@ -215,6 +215,23 @@ impl CPU {
         self.status.set(CpuFlags::NEGATIVE, data & 0b0010_0000 != 0);
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
     }
+    fn dex(&mut self) {
+        self.register_x = self.register_x.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+    fn dey(&mut self) {
+        self.register_y = self.register_y.wrapping_sub(1);
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
+    fn dec_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let data = self.mem_read(addr);
+        
+        let modification = data.wrapping_sub(1);
+        self.mem_write(addr, modification);
+        self.update_zero_and_negative_flags(modification);
+    }
 
     // ASL - Arithmetic Shift Left
     fn asl(&mut self, mode: &AddressingMode) -> u8 {
@@ -405,6 +422,14 @@ impl CPU {
                 0x24 | 0x2C => {
                     self.bit(&opcode.mode)
                 }
+                //DEC - Decrement Memory
+                0xC6 | 0xD6 | 0xCE | 0xDE => {
+                    self.dec_mem(&opcode.mode);
+                }
+                //DEX - Decrement X
+                0xCA => self.dex(),
+                //DEY - Decrement Y
+                0x88 => self.dey(),
 
                 // BCC - Branch if Carry Clear
                 0x90 => self.branch_if(!self.status.contains(CpuFlags::CARRY)),
@@ -420,7 +445,7 @@ impl CPU {
                 0x30 => self.branch_if(self.status.contains(CpuFlags::NEGATIVE)),
                 // BVC - Branch if Overflow Clear
                 0x50 => self.branch_if(!self.status.contains(CpuFlags::OVERFLOW)),
-                // BVC - Branch if Overflow Set
+                // BVS - Branch if Overflow Set
                 0x70 => self.branch_if(self.status.contains(CpuFlags::OVERFLOW)),
 
                 //SET FLAGS
@@ -434,9 +459,11 @@ impl CPU {
                 0x58 => self.cli(),
                 0xB8 => self.clv(),
 
+                //LDX 
                 0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
                     self.ldx(&opcode.mode);
                 }
+                //LDY
                 0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
                     self.ldy(&opcode.mode);
                 }
@@ -661,5 +688,20 @@ mod test {
         assert!(!cpu.status.contains(CpuFlags::ZERO));
         assert!(cpu.status.contains(CpuFlags::NEGATIVE));
         assert!(cpu.status.contains(CpuFlags::OVERFLOW));
+    }
+    #[test]
+    fn test_decrement_memory() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x50, 0x0f);
+        cpu.load_and_run(vec![0xc6, 0x50, 0x00]);
+        assert_eq!(cpu.mem_read(0x50), 0x0e);
+    }
+    #[test]
+    fn test_decrement_register() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xA2, 0x0f, 0xCA, 0xA0, 0x09, 0x88, 0x00]);
+        
+        assert_eq!(cpu.register_x, 0x0e);
+        assert_eq!(cpu.register_y, 0x08);
     }
 }
