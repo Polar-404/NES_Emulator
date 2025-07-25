@@ -358,6 +358,15 @@ impl CPU {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
     }
+    //INC
+    fn inc_mem(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let data = self.mem_read(addr);
+        
+        let modification = data.wrapping_add(1);
+        self.mem_write(addr, modification);
+        self.update_zero_and_negative_flags(modification);
+    }
     fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_x);
@@ -469,6 +478,11 @@ impl CPU {
                 }
                 //TAX
                 0xAA => self.tax(),
+
+                //INC
+                0xE6 | 0xF6 | 0xEE | 0xFE => {
+                    self.inc_mem(&opcode.mode);
+                }
 
                 //INX
                 0xe8 => self.inx(),
@@ -700,8 +714,15 @@ mod test {
     fn test_decrement_register() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xA2, 0x0f, 0xCA, 0xA0, 0x09, 0x88, 0x00]);
-        
+
         assert_eq!(cpu.register_x, 0x0e);
         assert_eq!(cpu.register_y, 0x08);
+    }
+    #[test]
+    fn test_increment_mem() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x10, 0x0e);
+        cpu.load_and_run(vec![0xE6, 0x10, 0x00]);
+        assert_eq!(cpu.mem_read(0x10), 0x0f);
     }
 }
