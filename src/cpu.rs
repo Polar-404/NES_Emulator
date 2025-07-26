@@ -248,6 +248,26 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
         return data
     }
+    //
+    fn jmp_abs(&mut self) {
+        let location = self.mem_read_u16(self.program_counter);
+        self.program_counter = location;
+    }
+    fn jmp_indrect(&mut self) {
+        let location = self.mem_read_u16(self.program_counter);
+        let indirect_ref: u16;
+        if location & 0x00FF == 0x00FF {
+            // implementação de um bug do 6502 que não rotaciona corretamente os bytes
+            // quando o low byte era terminado em FF ele n passava o hi byte para o proximo, 
+            //ao inves disso ele simplesmente dava "wrapping" no low byte
+            let lo = self.mem_read(location);
+            let hi = self.mem_read(location & 0xFF00);
+            indirect_ref = (hi as u16) << 8 | (lo as u16);
+        } else {
+            indirect_ref = self.mem_read_u16(location)
+        }
+        self.program_counter = indirect_ref;
+    }
 
     ///SEC - Set Carry
     fn sec(&mut self) {
@@ -483,6 +503,10 @@ impl CPU {
                 0xE6 | 0xF6 | 0xEE | 0xFE => {
                     self.inc_mem(&opcode.mode);
                 }
+                
+                //JMP
+                0x4C => self.jmp_abs(),
+                0x6C => self.jmp_indrect(),
 
                 //INX
                 0xe8 => self.inx(),
