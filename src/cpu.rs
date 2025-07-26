@@ -503,7 +503,7 @@ impl CPU {
                 0xE6 | 0xF6 | 0xEE | 0xFE => {
                     self.inc_mem(&opcode.mode);
                 }
-                
+
                 //JMP
                 0x4C => self.jmp_abs(),
                 0x6C => self.jmp_indrect(),
@@ -748,5 +748,13 @@ mod test {
         cpu.mem_write(0x10, 0x0e);
         cpu.load_and_run(vec![0xE6, 0x10, 0x00]);
         assert_eq!(cpu.mem_read(0x10), 0x0f);
+    }
+    #[test]
+    fn test_jump_abs() {
+    let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x4c, 0x05, 0x80, 0xa9, 0x10, 0xA2, 0x30, 0x00]);
+
+        assert_ne!(cpu.register_a, 0x10);
+        assert_eq!(cpu.register_x, 0x30);
     }
 }
