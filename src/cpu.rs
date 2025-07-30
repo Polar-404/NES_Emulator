@@ -25,6 +25,7 @@ pub struct CPU {
     pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendiho é 8bit
     pub status: CpuFlags, //registrador que guarda "flags" que indicam o resultado de operações anteriores
     pub program_counter: u16,
+    pub stack_pointer: u8, // SP
     memory: [u8; 0xFFFF]
 }
 #[derive(Debug)]
@@ -54,6 +55,7 @@ impl CPU {
             register_y: 0,
             status: CpuFlags::from_bits_truncate(0b100100),
             program_counter: 0,
+            stack_pointer: STACK_RESET,
             memory: [0; 0xFFFF]
         }
     }
@@ -299,6 +301,15 @@ impl CPU {
     fn clv(&mut self) {
         self.status.remove(CpuFlags::OVERFLOW);
     }
+
+    // ---------------- COMANDOS DA STACK ------------ //
+
+    fn pha(&mut self, data: u8) {
+        self.mem_write(STACK + self.stack_pointer as u16, data);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1)
+    }
+
+    // ------------------ ~~~~~~~~~~~~ -------------- //
     fn branch_if(&mut self, condition: bool) {
         if condition {
             //deve ser i8 pq o range vai de -127 a 128
