@@ -325,6 +325,13 @@ impl CPU {
         self.mem_write(STACK + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
+    fn plp(&mut self) {
+//TODO: necessario revisão e testes
+        let flags = CpuFlags::from_bits_truncate(self.stack_pop());
+        self.status.insert(flags);
+        self.status.remove(CpuFlags::BREAK);
+        self.status.insert(CpuFlags::BREAK2);
+    }
 
 
     // ------------------ ~~~~~~~~~~~~ -------------- //
