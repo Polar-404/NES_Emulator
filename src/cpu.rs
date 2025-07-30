@@ -303,11 +303,29 @@ impl CPU {
     }
 
     // ---------------- COMANDOS DA STACK ------------ //
+    fn increment_stack(&mut self) {
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+    }
+    fn stack_pop(&mut self) -> u8 {
+        if self.stack_pointer == 0xfd {
+            panic!("tried to pop a empty stack")
+        }
+        self.increment_stack();
+        let data = self.mem_read( STACK + self.stack_pointer as u16) ;
+/* TODO: não sei se eu deveria retornar o valor atual ou o proximo nessa função
+        no momento esta retornando o proximo */
+        data
+    }
 
+    fn pla(&mut self) {
+        self.register_a = self.stack_pop()
+    }
+    
     fn pha(&mut self, data: u8) {
         self.mem_write(STACK + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
+
 
     // ------------------ ~~~~~~~~~~~~ -------------- //
     fn branch_if(&mut self, condition: bool) {
@@ -514,6 +532,9 @@ impl CPU {
                 0xE6 | 0xF6 | 0xEE | 0xFE => {
                     self.inc_mem(&opcode.mode);
                 }
+
+                //PLA
+                0x68 => self.pla(),
 
                 //JMP
                 0x4C => self.jmp_abs(),
