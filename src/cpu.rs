@@ -1,5 +1,5 @@
 use crate::opcodes;
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Add};
 
 bitflags! {
     //bit flags para melhorar/automatizar o set e reset das flags
@@ -304,21 +304,22 @@ impl CPU {
 
     // ---------------- COMANDOS DA STACK ------------ //
     fn increment_stack(&mut self) {
-        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
     }
     fn stack_pop(&mut self) -> u8 {
         if self.stack_pointer == 0xfd {
             panic!("tried to pop a empty stack")
         }
         self.increment_stack();
+        //println!("addr: {}", STACK + self.stack_pointer as u16);
         let data = self.mem_read( STACK + self.stack_pointer as u16) ;
-/* TODO: não sei se eu deveria retornar o valor atual ou o proximo nessa função
-        no momento esta retornando o proximo */
+        //println!("data {}",data);
         data
     }
 
     fn pla(&mut self) {
-        self.register_a = self.stack_pop()
+        self.register_a = self.stack_pop();
+        self.update_zero_and_negative_flags(self.register_a);
     }
     
     fn pha(&mut self, data: u8) {
@@ -542,6 +543,8 @@ impl CPU {
 
                 //PLA
                 0x68 => self.pla(),
+                //PHA
+                0x48 => self.pha(self.register_a),
 
                 //JMP
                 0x4C => self.jmp_abs(),
@@ -795,5 +798,23 @@ mod test {
 
         assert_ne!(cpu.register_a, 0x10);
         assert_eq!(cpu.register_x, 0x30);
+    }
+    #[test]
+    fn test_pha() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xe0, 0x48]);
+        assert_eq!(cpu.mem_read((STACK + cpu.stack_pointer as u16).wrapping_add(1)), 0xe0)
+    }
+    #[test]
+    #[should_panic(expected = "tried to pop a empty stack")]
+    fn test_pla_panic() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x68]);
+    }
+    #[test]
+    fn test_pla_correctly() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xe0, 0x48, 0xa9, 0xd0, 0x48, 0xa9, 0x10, 0x68]);
+        assert_eq!(cpu.register_a, 0xd0);
     }
 }
