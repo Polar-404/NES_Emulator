@@ -257,6 +257,16 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
         return data
     }
+    fn asl_accumulator(&mut self) -> u8 {
+        if (self.register_a & 0b0000_0001) != 0 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        self.register_a = self.register_a << 1;
+        self.update_zero_and_negative_flags(self.register_a);
+        self.register_a
+    }
     // LSR
     fn lsr(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
@@ -271,6 +281,16 @@ impl CPU {
         self.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
         return data
+    }
+    fn lsr_accumulator(&mut self) -> u8 {
+        if (self.register_a & 0b0000_0001) != 0 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        self.register_a = self.register_a >> 1;
+        self.update_zero_and_negative_flags(self.register_a);
+        self.register_a
     }
     //
     fn jmp_abs(&mut self) {
@@ -530,14 +550,19 @@ impl CPU {
                 }
 
                 //ASL - Arithmetic Shift Left
-                0x0A | 0x06 | 0x16 | 0x0E | 0x1E => { 
+                0x06 | 0x16 | 0x0E | 0x1E => { 
                     self.asl(&opcode.mode);
                 }
+                0x0A => {
+                    self.asl_accumulator();
+                }
                 //LSR - Logical Shift Right
-                0x4A | 0x46 | 0x56 | 0x4e | 0x5e => {
+                0x46 | 0x56 | 0x4e | 0x5e => {
                     self.lsr(&opcode.mode);
                 }
-
+                0x4A => {
+                    self.lsr_accumulator();
+                }
                 // BIT - Bit Test
                 0x24 | 0x2C => {
                     self.bit(&opcode.mode);
