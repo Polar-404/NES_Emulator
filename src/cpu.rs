@@ -356,6 +356,10 @@ impl CPU {
         self.program_counter = self.mem_read_u16(self.program_counter)
         
     }
+    fn write_register(&mut self, mode: &AddressingMode, register: u8) {
+        let addr = self.get_oprand_adress(mode);
+        self.mem_write(addr, register);
+    }
 
 
     // ------------------ ~~~~~~~~~~~~ -------------- //
@@ -497,6 +501,14 @@ impl CPU {
                     self.compare(&opcode.mode, self.register_y);
                 }
 
+                //STX - Store X
+                0x86 | 0x96 | 0x8E => {
+                    self.write_register(&opcode.mode, self.register_x);
+                }
+                //STY - Store Y
+                0x84 | 0x94 | 0x8C => {
+                    self.write_register(&opcode.mode, self.register_y);
+                }
                 //AND BITWISE
                 0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x31 => {
                     self.and(&opcode.mode);
@@ -587,6 +599,11 @@ impl CPU {
 
                 //INX
                 0xC8 => self.iny(),
+
+                //NOP - No Operation
+                0xEA => {
+
+                }
 
                 //BRK
                 0x00 => return,
