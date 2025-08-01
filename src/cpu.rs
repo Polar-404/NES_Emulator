@@ -22,7 +22,7 @@ const STACK_RESET: u8 = 0xfd;
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
-    pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendiho é 8bit
+    pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendinho é 8bit
     pub status: CpuFlags, //registrador que guarda "flags" que indicam o resultado de operações anteriores
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
@@ -217,6 +217,13 @@ impl CPU {
         self.status.set(CpuFlags::NEGATIVE, data & 0b0010_0000 != 0);
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
     }
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let data = self.mem_read(addr);
+        self.register_a = self.register_a ^ data;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn dex(&mut self) {
         self.register_x = self.register_x.wrapping_sub(1);
         self.update_zero_and_negative_flags(self.register_x);
@@ -486,7 +493,11 @@ impl CPU {
 
                 // BIT - Bit Test
                 0x24 | 0x2C => {
-                    self.bit(&opcode.mode)
+                    self.bit(&opcode.mode);
+                }
+                // EOR - Exclusive OR
+                0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
+                    self.eor(&opcode.mode);
                 }
                 //DEC - Decrement Memory
                 0xC6 | 0xD6 | 0xCE | 0xDE => {
@@ -816,5 +827,12 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0xe0, 0x48, 0xa9, 0xd0, 0x48, 0xa9, 0x10, 0x68]);
         assert_eq!(cpu.register_a, 0xd0);
+    }
+    #[test]
+    fn test_eor() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0xe0);
+        cpu.load_and_run(vec![0xa9, 0xA2, 0x45, 0x20]);
+        assert_eq!(cpu.register_a ,0b0100_0010);
     }
 }
