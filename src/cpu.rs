@@ -1,6 +1,5 @@
 use crate::opcodes;
-use std::{collections::HashMap, ops::Add};
-
+use std::{collections::HashMap};
 bitflags! {
     //bit flags para melhorar/automatizar o set e reset das flags
     #[derive(Debug)]
@@ -32,12 +31,12 @@ pub struct CPU {
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
     Immediate,
+ 
     ZeroPage,
-    Absolute,
-
     ZeroPage_X,
     ZeroPage_Y,
 
+    Absolute,
     Absolute_X,
     Absolute_Y,
 
@@ -149,7 +148,8 @@ impl CPU {
     fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
-        (hi << 8) | (lo as u16)
+        println!("lo, hi: {} | {}", lo, hi);
+        return (hi << 8) | (lo as u16);
     }
     ///pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
     /// 
@@ -339,6 +339,22 @@ impl CPU {
         self.status.insert(flags);
         self.status.remove(CpuFlags::BREAK);
         self.status.insert(CpuFlags::BREAK2);
+    }
+    fn stack_push(&mut self, data: u8) {
+        self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1)
+    }
+
+    fn stack_push_u16(&mut self, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+        self.stack_push(hi);
+        self.stack_push(lo);
+    }
+    fn jsr(&mut self) {
+        self.stack_push_u16(self.program_counter.wrapping_add(1));
+        self.program_counter = self.mem_read_u16(self.program_counter)
+        
     }
 
 
@@ -556,6 +572,11 @@ impl CPU {
                 0x68 => self.pla(),
                 //PHA
                 0x48 => self.pha(self.register_a),
+                //PLP
+                0x28 => self.plp(),
+
+                //JSR
+                0x20 => self.jsr(),
 
                 //JMP
                 0x4C => self.jmp_abs(),
@@ -834,5 +855,14 @@ mod test {
         cpu.mem_write(0x20, 0xe0);
         cpu.load_and_run(vec![0xa9, 0xA2, 0x45, 0x20]);
         assert_eq!(cpu.register_a ,0b0100_0010);
+    }
+    #[test]
+    fn test_jsr() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![
+            0x20, 0x34, 0x12, 0x00  // JSR $1234
+        ]);
+        assert_eq!(cpu.program_counter, 0x1235);
+        assert_eq!(cpu.stack_pointer, 0xFB);
     }
 }
