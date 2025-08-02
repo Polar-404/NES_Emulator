@@ -223,6 +223,12 @@ impl CPU {
         self.register_a = self.register_a ^ data;
         self.update_zero_and_negative_flags(self.register_a);
     }
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let data = self.mem_read(addr);
+        self.register_a = self.register_a | data;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
 
     fn dex(&mut self) {
         self.register_x = self.register_x.wrapping_sub(1);
@@ -567,10 +573,15 @@ impl CPU {
                 0x24 | 0x2C => {
                     self.bit(&opcode.mode);
                 }
+                // ORA
+                0x09 | 0x05 | 0x15 | 0x0D | 0x1D | 0x19 | 0x01 | 0x11 => {
+                    self.ora(&opcode.mode);
+                }
                 // EOR - Exclusive OR
                 0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
                     self.eor(&opcode.mode);
                 }
+
                 //DEC - Decrement Memory
                 0xC6 | 0xD6 | 0xCE | 0xDE => {
                     self.dec_mem(&opcode.mode);
@@ -630,6 +641,8 @@ impl CPU {
                 0x48 => self.pha(self.register_a),
                 //PLP
                 0x28 => self.plp(),
+                //PHP - Push Processor Status
+                
 
                 //JSR
                 0x20 => self.jsr(),
