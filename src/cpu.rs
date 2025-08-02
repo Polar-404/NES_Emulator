@@ -208,12 +208,14 @@ impl CPU {
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
+    ///Bitwise AND
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
     }
 
+    ///BIT - Bit Test
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -236,10 +238,12 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///Decrement X
     fn dex(&mut self) {
         self.register_x = self.register_x.wrapping_sub(1);
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///Decrement Y
     fn dey(&mut self) {
         self.register_y = self.register_y.wrapping_sub(1);
         self.update_zero_and_negative_flags(self.register_y);
@@ -254,7 +258,7 @@ impl CPU {
         self.update_zero_and_negative_flags(modification);
     }
 
-    // ASL - Arithmetic Shift Left
+    /// ASL - Arithmetic Shift Left
     fn asl(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
         let mut data = self.mem_read(addr);
@@ -279,7 +283,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    // LSR
+    /// LSR
     fn lsr(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
         let mut data = self.mem_read(addr);
@@ -304,7 +308,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    // JMP
+    /// JMP
     fn jmp_abs(&mut self) {
         let location = self.mem_read_u16(self.program_counter);
         self.program_counter = location;
@@ -356,7 +360,7 @@ impl CPU {
         self.status.remove(CpuFlags::OVERFLOW);
     }
 
-    // ---------------- COMANDOS DA STACK ------------ //
+    /// ---------------- COMANDOS DA STACK ------------ //
     fn increment_stack(&mut self) {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
     }
@@ -370,17 +374,17 @@ impl CPU {
         //println!("data {}",data);
         data
     }
-    //PULL ACCUMULATOR
+    ///PULL ACCUMULATOR
     fn pla(&mut self) {
         self.register_a = self.stack_pop();
         self.update_zero_and_negative_flags(self.register_a);
     }
-    // PUSH ACCUMULATOR
+    /// PUSH ACCUMULATOR
     fn pha(&mut self, data: u8) {
         self.mem_write(STACK + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
-    //Pull Processor Status
+    ///Pull Processor Status
     fn plp(&mut self) {
 //TODO: necessario revisão e testes
         let flags = CpuFlags::from_bits_truncate(self.stack_pop());
@@ -392,9 +396,19 @@ impl CPU {
         self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
-    //Push Processor Status
+    ///Push Processor Status
     fn php(&mut self) {
         self.stack_push(self.status.bits() | 0b0011_0000);
+    }
+    ///TSX - Transfer Stack Pointer to X
+    fn tsx(&mut self) {
+        self.register_x = self.stack_pointer;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+    ///TXS - Transfer X to Stack Pointer
+    fn txs(&mut self) {
+        self.stack_pointer = self.register_x;
+        self.update_zero_and_negative_flags(self.stack_pointer);
     }
 
     fn stack_push_u16(&mut self, data: u16) {
@@ -662,6 +676,11 @@ impl CPU {
                 0x28 => self.plp(),
                 //PHP - Push Processor Status
                 0x08 => self.php(),
+
+                //TSX
+                0xBA => self.tsx(),
+                //TXS
+                0x9A => self.txs(),
 
                 //JSR
                 0x20 => self.jsr(),
