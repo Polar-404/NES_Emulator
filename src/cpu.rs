@@ -385,6 +385,9 @@ impl CPU {
         self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
+    fn php(&mut self) {
+        self.stack_push(self.status.bits() | 0b0011_0000);
+    }
 
     fn stack_push_u16(&mut self, data: u16) {
         let hi = (data >> 8) as u8;
@@ -642,7 +645,7 @@ impl CPU {
                 //PLP
                 0x28 => self.plp(),
                 //PHP - Push Processor Status
-                
+                0x08 => self.php(),
 
                 //JSR
                 0x20 => self.jsr(),
