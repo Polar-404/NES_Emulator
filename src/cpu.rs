@@ -511,6 +511,10 @@ impl CPU {
         self.status.insert(CpuFlags::BREAK2);
         self.program_counter = self.stack_pop_u16();
     }
+    fn rts(&mut self) {
+        self.program_counter = self.stack_pop_u16();
+        self.program_counter = self.program_counter.wrapping_add(1);
+    }
 
     // ------------------ ~~~~~~~~~~~~ -------------- //
     fn branch_if(&mut self, condition: bool) {
@@ -588,6 +592,38 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///SBC - Subtract with Carry
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let val = self.mem_read(addr);
+
+        let sum = (self.register_a as u16 - val as u16)  
+        - (if self.status.contains(CpuFlags::CARRY) {
+            1
+        } else {
+            0
+        });
+
+        if sum > 0xff { //seta a carry flag
+            self.status.insert(CpuFlags::CARRY); 
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        
+        let result = sum as u8;
+
+        if (result ^ val) & (result ^ self.register_a) & 0b1000_0000 != 0 { //seta a overflow flag
+            //usa os operadores logicos de XOR para verificar quais bits sao diferentes e dps verifica com 0b100...
+            //já q é o bit que quer ser verificado(o unico bit q importa)... se for diferente dos outros significa que
+            //ocorreu um overflow, 
+            self.status.insert(CpuFlags::OVERFLOW);
+        } else {
+            self.status.remove(CpuFlags::OVERFLOW);
+        }
+        self.register_a = result;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -639,6 +675,10 @@ impl CPU {
                 //ADC
                 0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
                     self.adc(&opcode.mode);
+                }
+                //SBC
+                0xE9 | 0xE5 | 0xF5 | 0xED | 0xFD | 0xF9 | 0xE1 | 0xF1 => {
+                    self.sbc(&opcode.mode);
                 }
 
                 //CMP (COMPARE A)
@@ -779,6 +819,8 @@ impl CPU {
                 //RTI - Return from Interrupt
                 0x40 => self.rti(),
 
+                //RTS - Return from Subroutine
+                0x60 => self.rts(),
 
                 //TSX
                 0xBA => self.tsx(),
