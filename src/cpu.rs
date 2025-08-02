@@ -148,7 +148,6 @@ impl CPU {
     fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
-        println!("lo, hi: {} | {}", lo, hi);
         return (hi << 8) | (lo as u16);
     }
     ///pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
@@ -298,7 +297,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    //
+    // JMP
     fn jmp_abs(&mut self) {
         let location = self.mem_read_u16(self.program_counter);
         self.program_counter = location;
@@ -364,16 +363,17 @@ impl CPU {
         //println!("data {}",data);
         data
     }
-
+    //PULL ACCUMULATOR
     fn pla(&mut self) {
         self.register_a = self.stack_pop();
         self.update_zero_and_negative_flags(self.register_a);
     }
-    
+    // PUSH ACCUMULATOR
     fn pha(&mut self, data: u8) {
         self.mem_write(STACK + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
+    //Pull Processor Status
     fn plp(&mut self) {
 //TODO: necessario revisão e testes
         let flags = CpuFlags::from_bits_truncate(self.stack_pop());
@@ -385,6 +385,7 @@ impl CPU {
         self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
+    //Push Processor Status
     fn php(&mut self) {
         self.stack_push(self.status.bits() | 0b0011_0000);
     }
@@ -395,6 +396,7 @@ impl CPU {
         self.stack_push(hi);
         self.stack_push(lo);
     }
+    //Jump to Subroutine
     fn jsr(&mut self) {
         self.stack_push_u16(self.program_counter.wrapping_add(1));
         self.program_counter = self.mem_read_u16(self.program_counter)
@@ -941,5 +943,21 @@ mod test {
         ]);
         assert_eq!(cpu.program_counter, 0x1235);
         assert_eq!(cpu.stack_pointer, 0xFB);
+    }
+    #[test]
+    fn test_register_write() {
+        let mut cpu = CPU::new();
+        
+        cpu.load_and_run(vec![0xA2, 0xe0, 0x86, 0x20]);
+        println!("registrador {}",cpu.register_x);
+        assert_eq!(cpu.mem_read(0x20), 0xe0);
+    }
+    #[test]
+    fn test_lsr() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0xe1);
+        cpu.load_and_run(vec![0x46, 0x20]);
+        assert!(cpu.status.contains(CpuFlags::CARRY));
+        assert_eq!(cpu.mem_read(0x20), 0b0111_0000);
     }
 }
