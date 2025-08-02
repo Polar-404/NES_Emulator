@@ -208,13 +208,85 @@ impl CPU {
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
+
+    ///Rotate Left
+    fn rol(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let mut data = self.mem_read(addr);
+        let previous_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 0b1000_0000 != 0 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data << 1;
+        if previous_carry {
+            data = data | 0b0000_0001
+        }
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+    }
+    ///Rotate Left Register A
+    fn rol_accumulator(&mut self) {
+        let mut data = self.register_a;
+        let previous_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 0b1000_0000 != 0 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data << 1;
+        if previous_carry {
+            data = data | 0b0000_0001
+        }
+        self.register_a = data;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    ///ROR - Rotate Right
+    fn ror(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+        let mut data = self.mem_read(addr);
+        let previous_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 0b1000_0000 != 0 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data >> 1;
+        if previous_carry {
+            data = data | 0b0000_0001
+        }
+        self.mem_write(addr, data);
+        self.update_zero_and_negative_flags(data);
+    }
+    ///Rotate Right Register A
+    fn ror_accumulator(&mut self) {
+        let mut data = self.register_a;
+        let previous_carry = self.status.contains(CpuFlags::CARRY);
+
+        if data & 0b1000_0000 != 0 {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+        data = data >> 1;
+        if previous_carry {
+            data = data | 0b0000_0001
+        }
+        self.register_a = data;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     ///Bitwise AND
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
     }
-
     ///BIT - Bit Test
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
@@ -225,6 +297,7 @@ impl CPU {
         self.status.set(CpuFlags::NEGATIVE, data & 0b0010_0000 != 0);
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
     }
+
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -666,6 +739,22 @@ impl CPU {
                 //INC
                 0xE6 | 0xF6 | 0xEE | 0xFE => {
                     self.inc_mem(&opcode.mode);
+                }
+
+                //ROL ACCUMULATOR / ROtate Accumulator Left
+                0x2A => self.rol_accumulator(),
+
+                //ROL - Rotate Left
+                0x26 | 0x36 | 0x2E | 0x3E => {
+                    self.rol(&opcode.mode);
+                }
+
+                //ROR ACCUMULATOR / Rotate Accumulator Right
+                0x6A => self.ror_accumulator(),
+
+                //ROR - Rotate Right
+                0x66 | 0x76 | 0x6E | 0x7E => {
+                    self.ror(&opcode.mode);
                 }
 
                 //PLA
