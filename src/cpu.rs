@@ -960,4 +960,23 @@ mod test {
         assert!(cpu.status.contains(CpuFlags::CARRY));
         assert_eq!(cpu.mem_read(0x20), 0b0111_0000);
     }
+    #[test]
+    fn test_ora_from_mem() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0xe0);
+        cpu.load_and_run(vec![0xa9, 0xa1, 0x05, 0x20]);
+        assert_eq!(cpu.register_a, 0b1110_0001);
+    }
+    #[test]
+    fn test_ora_from_immidiate() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa9, 0xa1, 0x09, 0xe0]);
+        assert_eq!(cpu.register_a, 0b1110_0001);
+    }
+    #[test]
+    fn test_php() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0x08]);
+        assert_eq!(cpu.stack_pop(), 0b0011_0100);
+    }
 }
