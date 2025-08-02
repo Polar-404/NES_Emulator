@@ -503,7 +503,7 @@ impl CPU {
     fn stack_pop_u16(&mut self) -> u16 {
         let lo = self.stack_pop() as u16;
         let hi = self.stack_pop() as u16;
-        return (hi << 8) | (lo as u16);
+        return (hi << 8) | lo;
     }
     fn rti(&mut self) {
         self.status = CpuFlags::from_bits_truncate(self.stack_pop());
@@ -1161,5 +1161,43 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0x08]);
         assert_eq!(cpu.stack_pop(), 0b0011_0100);
+    }
+    #[test]
+    fn test_sbc() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0x02);
+        cpu.load_and_run(vec![0xa9, 0xe0, 0xe5, 0x20]);
+        assert_eq!(cpu.register_a, 0xde);
+    }
+    #[test]
+    fn test_rti() {
+        let mut cpu = CPU::new();
+        cpu.stack_push(0b0010_0100);
+        cpu.stack_push_u16(0x1234);
+        
+        cpu.load_and_run(vec![0x40]);
+        //println!("{}", cpu.program_counter);
+        //println!("{}", cpu.status.bits());
+        assert_eq!(cpu.program_counter, 0x2413); //inverte por causa do little endian
+        assert_eq!(cpu.status.bits(), 0b0010_0100);
+    }
+    #[test]
+    fn test_rol() {
+        let mut cpu = CPU::new();
+        cpu.mem_write(0x20, 0xe0);
+        cpu.load_and_run(vec![0x26, 0x20]);
+        assert_eq!(cpu.mem_read(0x20), 0xc0);
+    }
+    #[test]
+    fn test_txa() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xa2, 0xe0, 0x8a]);
+        assert_eq!(cpu.register_a, 0xe0);
+    }
+    #[test]
+    fn test_tsx() {
+        let mut cpu = CPU::new();
+        cpu.load_and_run(vec![0xba]);
+        assert_eq!(cpu.register_x, STACK_RESET);
     }
 }
