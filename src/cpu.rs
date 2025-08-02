@@ -197,6 +197,12 @@ impl CPU {
         self.register_y = val;
         self.update_zero_and_negative_flags(self.register_y);
     }
+    ///TXA e TYA
+    fn transfer_to_accumulator(&mut self, register: u8) {
+        self.register_a = register;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
@@ -207,6 +213,7 @@ impl CPU {
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
     }
+
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -488,6 +495,11 @@ impl CPU {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
     }
+    fn tay(&mut self) {
+        self.register_y = self.register_a;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
     //INC
     fn inc_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
@@ -634,6 +646,8 @@ impl CPU {
                 }
                 //TAX
                 0xAA => self.tax(),
+                //TAY
+                0xA8 => self.tay(),
 
                 //INC
                 0xE6 | 0xF6 | 0xEE | 0xFE => {
@@ -659,8 +673,13 @@ impl CPU {
                 //INX
                 0xe8 => self.inx(),
 
-                //INX
+                //INY
                 0xC8 => self.iny(),
+
+                //TXA
+                0x8A => self.transfer_to_accumulator(self.register_x),
+                //TYA
+                0x98 => self.transfer_to_accumulator(self.register_y),
 
                 //NOP - No Operation
                 0xEA => {
