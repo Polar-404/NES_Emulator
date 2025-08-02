@@ -500,7 +500,17 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         self.mem_write(addr, register);
     }
-
+    fn stack_pop_u16(&mut self) -> u16 {
+        let lo = self.stack_pop() as u16;
+        let hi = self.stack_pop() as u16;
+        return (hi << 8) | (lo as u16);
+    }
+    fn rti(&mut self) {
+        self.status = CpuFlags::from_bits_truncate(self.stack_pop());
+        self.status.remove(CpuFlags::BREAK);
+        self.status.insert(CpuFlags::BREAK2);
+        self.program_counter = self.stack_pop_u16();
+    }
 
     // ------------------ ~~~~~~~~~~~~ -------------- //
     fn branch_if(&mut self, condition: bool) {
@@ -765,6 +775,10 @@ impl CPU {
                 0x28 => self.plp(),
                 //PHP - Push Processor Status
                 0x08 => self.php(),
+
+                //RTI - Return from Interrupt
+                0x40 => self.rti(),
+
 
                 //TSX
                 0xBA => self.tsx(),
