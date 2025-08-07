@@ -1,3 +1,5 @@
+// The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
+// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 
 
 use crate::opcodes;
@@ -19,7 +21,7 @@ bitflags! {
     }
 }
 
-/// The stack on the 6502 is a hard-coded memory address that extends from **0x0100** to **0x01FF**.
+/// The stack on the 6502 is a "hard-coded" memory address that extends from **0x0100** to **0x01FF**.
 const STACK: u16 = 0x0100;
 
 /// While the stack extends to 0x01FF, **0xFD** is a common initial value for the stack pointer.
@@ -27,7 +29,7 @@ const STACK: u16 = 0x0100;
 /// This starting point can help mitigate certain bugs.
 const STACK_RESET: u8 = 0xfd;
 
-/// The main (and, as far as I know, only) difference between the 20A4 used in the NES and the 6502 is that the 20A4 has integrated audio.
+/// The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 2A03 has integrated audio.
 /// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 pub struct CPU {
     pub register_a: u8,
@@ -154,11 +156,14 @@ impl CPU {
         self.reset_interrupt();
         self.run()
     }
+
+    ///writes the program counter to
     pub fn load(&mut self, program: Vec<u8>) {
         self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]); //copia de src: program para self: memory
         self.mem_write_u16(0xFFFC,0x8000);
     }
 
+    ///resets the registers and flags to it's intial values, as well as the program counter to 0xFFFC
     pub fn reset_interrupt(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
@@ -193,22 +198,19 @@ impl CPU {
     }
 
 
-    // -------------comandos de processamento de bits e funções do processador--------------
+    // -------------processing bits and other logical cpu functions--------------
 
+    ///LDA - Load A
+    ///Takes a value at the given location (acording to the addressing mode) then loads it into the accumulator (register A)
     fn lda(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode); //VÊ salva qual é o modo correspondente da operação que chamou, e salva o resultado
-        //se for por exemplo Immidiate, ele retorna o match do imidiate, ou seja, seria o proprio program counter
-        // que no caso é imediata proxima instrução da maquina
+        let addr = self.get_oprand_adress(mode);
 
-        let value = self.mem_read(addr); //lê o resultado do match, que por exemplo, em immediate, seria o program counter
-        // então ele lê o valor do program counter e salva na variavel value
+        let value = self.mem_read(addr);
 
-        // em outras palavras addr(address) é o endereço, value simplesmente é o valor que esta naquele endereço
-
-        //agora que ele ja procurou e salvou qual é o valor ele vai registrar ele
-        self.register_a = value;//registra o value no registrador A, afinal é isso que o comando LDA faz
-        self.update_zero_and_negative_flags(self.register_a);//update nas flags
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
     }
+    ///LDA - Load X
     fn ldx(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
@@ -216,6 +218,7 @@ impl CPU {
         self.register_x = val;
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///LDA - Load Y
     fn ldy(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
@@ -229,6 +232,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///STA - Store A
     ///stores the accumulator into the target memory addrss
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
@@ -325,12 +329,14 @@ impl CPU {
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
     }
 
+    ///EOR - Bitwise Exclusive OR
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
         self.register_a = self.register_a ^ data;
         self.update_zero_and_negative_flags(self.register_a);
     }
+    ///ORA - Bitwise OR
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -373,6 +379,7 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
         return data
     }
+    /// ASL - Arithmetic Shift Left
     fn asl_accumulator(&mut self) -> u8 {
         if (self.register_a & 0b0000_0001) != 0 {
             self.status.insert(CpuFlags::CARRY);
@@ -383,7 +390,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    /// LSR
+    ///LSR - Logical Shift Right
     fn lsr(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
         let mut data = self.mem_read(addr);
@@ -398,6 +405,7 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
         return data
     }
+    ///LSR - Logical Shift Right
     fn lsr_accumulator(&mut self) -> u8 {
         if (self.register_a & 0b0000_0001) != 0 {
             self.status.insert(CpuFlags::CARRY);
@@ -408,11 +416,12 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    /// JMP
+    ///JMP - Jump
     fn jmp_abs(&mut self) {
         let location = self.mem_read_u16(self.program_counter);
         self.program_counter = location;
     }
+    ///JMP - Jump
     fn jmp_indrect(&mut self) {
         let location = self.mem_read_u16(self.program_counter);
         let indirect_ref: u16;
@@ -532,18 +541,23 @@ impl CPU {
         let hi = self.stack_pop() as u16;
         return (hi << 8) | lo;
     }
+
+    ///RTI - Return from Interrupt
     fn rti(&mut self) {
         self.status = CpuFlags::from_bits_truncate(self.stack_pop());
         self.status.remove(CpuFlags::BREAK);
         self.status.insert(CpuFlags::BREAK2);
         self.program_counter = self.stack_pop_u16();
     }
+    ///RTS - Return from Subroutine
     fn rts(&mut self) {
         self.program_counter = self.stack_pop_u16();
         self.program_counter = self.program_counter.wrapping_add(1);
     }
 
-    // ------------------ ~~~~~~~~~~~~ -------------- //
+    // ------------------ CONDITIONS ------------------ //
+
+
     fn branch_if(&mut self, condition: bool) {
         if condition {
             //deve ser i8 pq o range vai de -127 a 128
@@ -585,6 +599,8 @@ impl CPU {
         }
     }
 
+    ///ADC - Add with Carry
+    /// 
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
     /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
     /// depois finaliza o comando passando o resultado para o registrador A e dando update nas flags ZERO e NEGATIVE
@@ -651,16 +667,18 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///TAX - Transfer A to X
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///TAX - Transfer A to Y
     fn tay(&mut self) {
         self.register_y = self.register_a;
         self.update_zero_and_negative_flags(self.register_y);
     }
 
-    //INC
+    //INC - Increment Memory
     fn inc_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -669,16 +687,20 @@ impl CPU {
         self.mem_write(addr, modification);
         self.update_zero_and_negative_flags(modification);
     }
+    ///INX - Increment X
     fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///INY - Increment Y
     fn iny(&mut self) {
         self.register_y = self.register_y.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_y);
     }
 
-    //funções de processar/intepretar codigo
+    ///Starts looping the instructions, 0x00(BRK) is the only way to break the loop.
+    /// 
+    ///The program counter by default starts at 0xFFFC, and it will read top to down increasing by the number of bytes of the current instruction
     pub fn run(&mut self) {// mut self para poder alterar os valores da struct cpu, por ex, register a
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
         loop {
