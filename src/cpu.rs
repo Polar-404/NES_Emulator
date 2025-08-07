@@ -1,28 +1,54 @@
+
+
 use crate::opcodes;
 use std::{collections::HashMap};
 bitflags! {
-    //bit flags para melhorar/automatizar o set e reset das flags
+
+    /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
+
     #[derive(Debug)]
     pub struct CpuFlags: u8 {
         const CARRY             = 0b00000001;
         const ZERO              = 0b00000010;
         const INTERRUPT_DISABLE = 0b00000100;
-        const DECIMAL_MODE      = 0b00001000; // nao é usado no NES
+        const DECIMAL_MODE      = 0b00001000;
         const BREAK             = 0b00010000;
-        const BREAK2            = 0b00100000;
+        const BREAK2            = 0b00100000; // isn't used on NES
         const OVERFLOW          = 0b01000000;
         const NEGATIVE          = 0b10000000;
     }
 }
 
+/// The stack on the 6502 is a hard-coded memory address that extends from **0x0100** to **0x01FF**.
 const STACK: u16 = 0x0100;
+
+/// While the stack extends to 0x01FF, **0xFD** is a common initial value for the stack pointer.
+/// 
+/// This starting point can help mitigate certain bugs.
 const STACK_RESET: u8 = 0xfd;
 
+/// The main (and, as far as I know, only) difference between the 20A4 used in the NES and the 6502 is that the 20A4 has integrated audio.
+/// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
-    pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendinho é 8bit
-    pub status: CpuFlags, //registrador que guarda "flags" que indicam o resultado de operações anteriores
+    pub register_y: u8,
+
+    ///Instructions that save or restore the flags map them to bits in the architectural 'P' register as follows:
+    ///
+    ///7  bit  0
+    ///---- ----
+    ///NV1B DIZC
+    ///|||| ||||
+    ///|||| |||+- Carry
+    ///|||| ||+-- Zero
+    ///|||| |+--- Interrupt Disable
+    ///|||| +---- Decimal
+    ///|||+------ (No CPU effect; see: the B flag)
+    ///||+------- (No CPU effect; always pushed as 1)
+    ///|+-------- Overflow
+    ///+--------- Negative
+    pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
     memory: [u8; 0xFFFF]
@@ -47,7 +73,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new() -> Self {// função construtora da cpu colocando os valores iniciais
+    pub fn new() -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -59,12 +85,8 @@ impl CPU {
         }
     }
 
-    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
-        // função de ver o parametro e procurar o valor no
-        // lugar que esta de acordo com o parametro coreespondente, por exemplo,
-        // se o parametro for pra procurar o proximo valor imeditato, ou se for pra
-        // procurar em um endereço de memoria u8 ou u16
 
+    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immediate => self.program_counter, //pega o proximo imediato proximo valor
             //e joga na memoria (no register A)
@@ -145,27 +167,31 @@ impl CPU {
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
 
-    fn mem_read_u16(&mut self, pos: u16) -> u16 {
-        let lo = self.mem_read(pos) as u16;
-        let hi = self.mem_read(pos + 1) as u16;
-        return (hi << 8) | (lo as u16);
-    }
-    ///pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
-    /// 
-    ///depois pega somente os bits menos significativos, os outros seram setados como 0... depois escreve na ordem inversa
-    /// 
-    /// escrevendo então em little endian
     fn update_zero_and_negative_flags(&mut self, result:u8) {
         self.status.set(CpuFlags::ZERO, result == 0);
         self.status.set(CpuFlags::NEGATIVE, result & 0b1000_0000 != 0);
     }
 
+    ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
+    ///Then, take only the least significant bits, and set the others to 0. So it writes in reverse order 
+    /// 
+    ///Therefore writing in little-endian.
     fn mem_write_u16(&mut self, pos: u16, data: u16) {
-        let hi = (data >> 8) as u8; //pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
-        let lo = (data & 0xff) as u8; //pega somente os bits menos significativos, os outros seram setados como 0
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8; 
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
     }
+    
+    ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
+    ///Then, take only the least significant bits, and set the others to 0. 
+    ///Finally, return them in reverse order, reading in little-endian.
+    fn mem_read_u16(&mut self, pos: u16) -> u16 {
+        let lo = self.mem_read(pos) as u16;
+        let hi = self.mem_read(pos + 1) as u16;
+        return (hi << 8) | (lo as u16);
+    }
+
 
     // -------------comandos de processamento de bits e funções do processador--------------
 
@@ -203,6 +229,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///stores the accumulator into the target memory addrss
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
@@ -657,7 +684,11 @@ impl CPU {
         loop {
             let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
+
+
             let program_counter_state = self.program_counter;
+
+
             let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido", code));
 
             match code{
@@ -854,6 +885,8 @@ impl CPU {
                 0x00 => return,
                 _ => todo!()
             }
+
+            //increments the program counter accordingly to how many cicles the opcode is specified at the hashmap
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len -1) as u16;
             }
@@ -861,11 +894,12 @@ impl CPU {
     }
 }
 
+
+///Simple tests module for the cpu
 #[cfg(test)] //tag de testes
 mod test {
 
-    use super::*; //importa/herda tudo do modulo pai
-
+    use super::*;
     // ------------------- LDA ------------------
     #[test]
     fn test_0xa9_lda_immediato() {
