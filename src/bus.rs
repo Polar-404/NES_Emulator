@@ -13,7 +13,6 @@ pub struct BUS {
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
     unmapped: [u8; 0xBFE0] 
-
 }
 impl BUS {
     
@@ -27,23 +26,65 @@ impl BUS {
             // ppu: PPU:new()
         }
     }
-    pub fn mem_read(&self, addr: u16) -> u8 {
-        if addr <= 2048 {
-            let addr = addr & 0x7FF;
-            return self.cpu_memory[addr as usize]
+    //fn match_address(&mut self, addr: u16) -> &mut u8 {
+    //}
+    pub fn mem_read(&mut self, addr: u16) -> u8{
+        match addr {
+            0x0000..=0x1FFF => {
+                let addr = addr & 0x01FF;
+                self.cpu_memory[addr as usize]
+            }
+            0x2000..=0x3FFF => {
+                let addr = addr & 0x0007;
+                self.ppu_registers[addr as usize]
+            }
+            0x4000..=0x4017 => {
+                let addr = addr - 0x4000;
+                self.nes_apu_and_io_registers[addr as usize]
+            }
+            0x4018..=0x401F => {
+                let addr = addr - 0x4018;
+                self.apu_and_io_functionality[addr as usize]
+            }
+            0x4020..=0xFFFF => {
+                let addr = addr - 0x4020;
+                self.unmapped[addr as usize]
+            }
         }
-        if addr <= 0x3FFF {
-            let addr = addr & 0x08;
-            return self.ppu_registers[addr as usize]
+    }
+    pub fn mem_write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x0000..=0x1FFF => {
+                let addr = addr & 0x01FF;
+                self.cpu_memory[addr as usize] = val
+            }
+            0x2000..=0x3FFF => {
+                let addr = addr & 0x0007;
+                self.ppu_registers[addr as usize] = val
+            }
+            0x4000..=0x4017 => {
+                let addr = addr - 0x4000;
+                self.nes_apu_and_io_registers[addr as usize] = val
+            }
+            0x4018..=0x401F => {
+                let addr = addr - 0x4018;
+                self.apu_and_io_functionality[addr as usize] = val
+            }
+            0x4020..=0xFFFF => {
+                let addr = addr - 0x4020;
+                self.unmapped[addr as usize] = val
+            }
         }
-        if addr <= 0x4017 {
-            let addr = addr & 0x18;
-            return self.nes_apu_and_io_registers[addr as usize]
-        }
-        if addr <= 0x401F {
-            let addr = addr & 0x18;
-            return self.apu_and_io_functionality[addr as usize]
-        }
-        self.unmapped[addr as usize]
+    }
+    pub fn mem_read_u16(&self, pos: u16) -> u16{
+        let lo = self.mem_read(pos) as u16;
+        let hi = self.mem_read(pos + 1) as u16;
+        return (hi << 8) | (lo as u16);
+    }
+    pub fn mem_write_u16(&mut self, pos: u16, data: u16) {
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8; 
+        self.mem_write(pos, lo);
+        self.mem_write(pos + 1, hi);
     }
 }

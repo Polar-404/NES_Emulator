@@ -3,6 +3,7 @@
 
 
 use crate::opcodes;
+use crate::bus::BUS;
 use std::{collections::HashMap};
 bitflags! {
 
@@ -53,7 +54,7 @@ pub struct CPU {
     pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
-    memory: [u8; 0xFFFF]
+    bus: BUS
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -83,7 +84,7 @@ impl CPU {
             status: CpuFlags::from_bits_truncate(0b100100),
             program_counter: 0,
             stack_pointer: STACK_RESET,
-            memory: [0; 0xFFFF]
+            bus: BUS::new()
         }
     }
 
