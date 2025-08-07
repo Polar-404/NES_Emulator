@@ -19,8 +19,10 @@ impl OpCode {
         }
     }
 }
-lazy_static! {// lazy static para as variaveis staticas n serem iniciadas
-    // em compilação, mas sim na primeira vez q elas forem chamadas
+
+//lazy_static macro needed to inicialize values that need heap alocated memory as static
+//such as a vector of "opcode::new()"
+lazy_static! {
     pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
         OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
         OpCode::new(0xaa, "TAX", 1, 2, AddressingMode::NoneAddressing),
@@ -250,6 +252,9 @@ lazy_static! {// lazy static para as variaveis staticas n serem iniciadas
 
     ];
 
+    ///Integrates every instruction into a HashMap, **passing it's hexadecimal code as it's key** 
+    /// 
+    /// and all the other relevant information such as addressing mode, cicles, and assembly name
     pub static ref OPCODES_MAP: HashMap<u8, &'static OpCode> = {
         let mut map = HashMap::new();
         for cpline in &*CPU_OPS_CODES {

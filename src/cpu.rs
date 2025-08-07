@@ -1,28 +1,56 @@
+// The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
+// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
+
+
 use crate::opcodes;
 use std::{collections::HashMap};
 bitflags! {
-    //bit flags para melhorar/automatizar o set e reset das flags
+
+    /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
+
     #[derive(Debug)]
     pub struct CpuFlags: u8 {
         const CARRY             = 0b00000001;
         const ZERO              = 0b00000010;
         const INTERRUPT_DISABLE = 0b00000100;
-        const DECIMAL_MODE      = 0b00001000; // nao é usado no NES
+        const DECIMAL_MODE      = 0b00001000;
         const BREAK             = 0b00010000;
-        const BREAK2            = 0b00100000;
+        const BREAK2            = 0b00100000; // isn't used on NES
         const OVERFLOW          = 0b01000000;
         const NEGATIVE          = 0b10000000;
     }
 }
 
+/// The stack on the 6502 is a "hard-coded" memory address that extends from **0x0100** to **0x01FF**.
 const STACK: u16 = 0x0100;
+
+/// While the stack extends to 0x01FF, **0xFD** is a common initial value for the stack pointer.
+/// 
+/// This starting point can help mitigate certain bugs.
 const STACK_RESET: u8 = 0xfd;
 
+/// The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 2A03 has integrated audio.
+/// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
-    pub register_y: u8, //8-bit [numero de 0 a 255], ja q o processador do nintendinho é 8bit
-    pub status: CpuFlags, //registrador que guarda "flags" que indicam o resultado de operações anteriores
+    pub register_y: u8,
+
+    ///Instructions that save or restore the flags map them to bits in the architectural 'P' register as follows:
+    ///
+    ///7  bit  0
+    ///---- ----
+    ///NV1B DIZC
+    ///|||| ||||
+    ///|||| |||+- Carry
+    ///|||| ||+-- Zero
+    ///|||| |+--- Interrupt Disable
+    ///|||| +---- Decimal
+    ///|||+------ (No CPU effect; see: the B flag)
+    ///||+------- (No CPU effect; always pushed as 1)
+    ///|+-------- Overflow
+    ///+--------- Negative
+    pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
     memory: [u8; 0xFFFF]
@@ -47,7 +75,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new() -> Self {// função construtora da cpu colocando os valores iniciais
+    pub fn new() -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -59,12 +87,8 @@ impl CPU {
         }
     }
 
-    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
-        // função de ver o parametro e procurar o valor no
-        // lugar que esta de acordo com o parametro coreespondente, por exemplo,
-        // se o parametro for pra procurar o proximo valor imeditato, ou se for pra
-        // procurar em um endereço de memoria u8 ou u16
 
+    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immediate => self.program_counter, //pega o proximo imediato proximo valor
             //e joga na memoria (no register A)
@@ -132,11 +156,14 @@ impl CPU {
         self.reset_interrupt();
         self.run()
     }
+
+    ///writes the program counter to
     pub fn load(&mut self, program: Vec<u8>) {
         self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]); //copia de src: program para self: memory
         self.mem_write_u16(0xFFFC,0x8000);
     }
 
+    ///resets the registers and flags to it's intial values, as well as the program counter to 0xFFFC
     pub fn reset_interrupt(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
@@ -145,44 +172,45 @@ impl CPU {
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
 
-    fn mem_read_u16(&mut self, pos: u16) -> u16 {
-        let lo = self.mem_read(pos) as u16;
-        let hi = self.mem_read(pos + 1) as u16;
-        return (hi << 8) | (lo as u16);
-    }
-    ///pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
-    /// 
-    ///depois pega somente os bits menos significativos, os outros seram setados como 0... depois escreve na ordem inversa
-    /// 
-    /// escrevendo então em little endian
     fn update_zero_and_negative_flags(&mut self, result:u8) {
         self.status.set(CpuFlags::ZERO, result == 0);
         self.status.set(CpuFlags::NEGATIVE, result & 0b1000_0000 != 0);
     }
 
+    ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
+    ///Then, take only the least significant bits, and set the others to 0. So it writes in reverse order 
+    /// 
+    ///Therefore writing in little-endian.
     fn mem_write_u16(&mut self, pos: u16, data: u16) {
-        let hi = (data >> 8) as u8; //pega os oito bits mais significativos e passa para direita, salvando o valor deles em uma variavel 8bit
-        let lo = (data & 0xff) as u8; //pega somente os bits menos significativos, os outros seram setados como 0
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8; 
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
     }
-
-    // -------------comandos de processamento de bits e funções do processador--------------
-
-    fn lda(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode); //VÊ salva qual é o modo correspondente da operação que chamou, e salva o resultado
-        //se for por exemplo Immidiate, ele retorna o match do imidiate, ou seja, seria o proprio program counter
-        // que no caso é imediata proxima instrução da maquina
-
-        let value = self.mem_read(addr); //lê o resultado do match, que por exemplo, em immediate, seria o program counter
-        // então ele lê o valor do program counter e salva na variavel value
-
-        // em outras palavras addr(address) é o endereço, value simplesmente é o valor que esta naquele endereço
-
-        //agora que ele ja procurou e salvou qual é o valor ele vai registrar ele
-        self.register_a = value;//registra o value no registrador A, afinal é isso que o comando LDA faz
-        self.update_zero_and_negative_flags(self.register_a);//update nas flags
+    
+    ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
+    ///Then, take only the least significant bits, and set the others to 0. 
+    ///Finally, return them in reverse order, reading in little-endian.
+    fn mem_read_u16(&mut self, pos: u16) -> u16 {
+        let lo = self.mem_read(pos) as u16;
+        let hi = self.mem_read(pos + 1) as u16;
+        return (hi << 8) | (lo as u16);
     }
+
+
+    // -------------processing bits and other logical cpu functions--------------
+
+    ///LDA - Load A
+    ///Takes a value at the given location (acording to the addressing mode) then loads it into the accumulator (register A)
+    fn lda(&mut self, mode: &AddressingMode) {
+        let addr = self.get_oprand_adress(mode);
+
+        let value = self.mem_read(addr);
+
+        self.register_a = value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+    ///LDA - Load X
     fn ldx(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
@@ -190,6 +218,7 @@ impl CPU {
         self.register_x = val;
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///LDA - Load Y
     fn ldy(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
@@ -203,6 +232,8 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///STA - Store A
+    ///stores the accumulator into the target memory addrss
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
@@ -298,12 +329,14 @@ impl CPU {
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
     }
 
+    ///EOR - Bitwise Exclusive OR
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
         self.register_a = self.register_a ^ data;
         self.update_zero_and_negative_flags(self.register_a);
     }
+    ///ORA - Bitwise OR
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -346,6 +379,7 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
         return data
     }
+    /// ASL - Arithmetic Shift Left
     fn asl_accumulator(&mut self) -> u8 {
         if (self.register_a & 0b0000_0001) != 0 {
             self.status.insert(CpuFlags::CARRY);
@@ -356,7 +390,7 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    /// LSR
+    ///LSR - Logical Shift Right
     fn lsr(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
         let mut data = self.mem_read(addr);
@@ -371,6 +405,7 @@ impl CPU {
         self.update_zero_and_negative_flags(data);
         return data
     }
+    ///LSR - Logical Shift Right
     fn lsr_accumulator(&mut self) -> u8 {
         if (self.register_a & 0b0000_0001) != 0 {
             self.status.insert(CpuFlags::CARRY);
@@ -381,11 +416,12 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
         self.register_a
     }
-    /// JMP
+    ///JMP - Jump
     fn jmp_abs(&mut self) {
         let location = self.mem_read_u16(self.program_counter);
         self.program_counter = location;
     }
+    ///JMP - Jump
     fn jmp_indrect(&mut self) {
         let location = self.mem_read_u16(self.program_counter);
         let indirect_ref: u16;
@@ -505,18 +541,23 @@ impl CPU {
         let hi = self.stack_pop() as u16;
         return (hi << 8) | lo;
     }
+
+    ///RTI - Return from Interrupt
     fn rti(&mut self) {
         self.status = CpuFlags::from_bits_truncate(self.stack_pop());
         self.status.remove(CpuFlags::BREAK);
         self.status.insert(CpuFlags::BREAK2);
         self.program_counter = self.stack_pop_u16();
     }
+    ///RTS - Return from Subroutine
     fn rts(&mut self) {
         self.program_counter = self.stack_pop_u16();
         self.program_counter = self.program_counter.wrapping_add(1);
     }
 
-    // ------------------ ~~~~~~~~~~~~ -------------- //
+    // ------------------ CONDITIONS ------------------ //
+
+
     fn branch_if(&mut self, condition: bool) {
         if condition {
             //deve ser i8 pq o range vai de -127 a 128
@@ -558,6 +599,8 @@ impl CPU {
         }
     }
 
+    ///ADC - Add with Carry
+    /// 
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
     /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
     /// depois finaliza o comando passando o resultado para o registrador A e dando update nas flags ZERO e NEGATIVE
@@ -624,16 +667,18 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    ///TAX - Transfer A to X
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///TAX - Transfer A to Y
     fn tay(&mut self) {
         self.register_y = self.register_a;
         self.update_zero_and_negative_flags(self.register_y);
     }
 
-    //INC
+    //INC - Increment Memory
     fn inc_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
@@ -642,22 +687,30 @@ impl CPU {
         self.mem_write(addr, modification);
         self.update_zero_and_negative_flags(modification);
     }
+    ///INX - Increment X
     fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_x);
     }
+    ///INY - Increment Y
     fn iny(&mut self) {
         self.register_y = self.register_y.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_y);
     }
 
-    //funções de processar/intepretar codigo
+    ///Starts looping the instructions, 0x00(BRK) is the only way to break the loop.
+    /// 
+    ///The program counter by default starts at 0xFFFC, and it will read top to down increasing by the number of bytes of the current instruction
     pub fn run(&mut self) {// mut self para poder alterar os valores da struct cpu, por ex, register a
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
         loop {
             let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
+
+
             let program_counter_state = self.program_counter;
+
+
             let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido", code));
 
             match code{
@@ -854,6 +907,8 @@ impl CPU {
                 0x00 => return,
                 _ => todo!()
             }
+
+            //increments the program counter accordingly to how many cicles the opcode is specified at the hashmap
             if program_counter_state == self.program_counter {
                 self.program_counter += (opcode.len -1) as u16;
             }
@@ -861,11 +916,12 @@ impl CPU {
     }
 }
 
+
+///Simple tests module for the cpu
 #[cfg(test)] //tag de testes
 mod test {
 
-    use super::*; //importa/herda tudo do modulo pai
-
+    use super::*;
     // ------------------- LDA ------------------
     #[test]
     fn test_0xa9_lda_immediato() {
