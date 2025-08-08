@@ -2,7 +2,7 @@ pub struct BUS {
 
     //[https://www.nesdev.org/wiki/CPU_memory_map]
 
-    cpu_memory: [u8; 0x7FF],
+    cpu_memory: [u8; 0x0800],
     ppu_registers: [u8; 0x08],
     nes_apu_and_io_registers: [u8; 0x18],
 
@@ -18,7 +18,7 @@ impl BUS {
     
     pub fn new() -> Self {
         BUS {
-            cpu_memory: [0; 0x7FF],
+            cpu_memory: [0; 0x0800],
             ppu_registers: [0; 0x08],
             nes_apu_and_io_registers: [0; 0x18],
             apu_and_io_functionality: [0; 0x08], 
@@ -28,10 +28,10 @@ impl BUS {
     }
     //fn match_address(&mut self, addr: u16) -> &mut u8 {
     //}
-    pub fn mem_read(&mut self, addr: u16) -> u8{
+    pub fn mem_read(&self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x1FFF => {
-                let addr = addr & 0x01FF;
+                let addr = addr & 0x07FF;
                 self.cpu_memory[addr as usize]
             }
             0x2000..=0x3FFF => {
@@ -55,7 +55,7 @@ impl BUS {
     pub fn mem_write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x1FFF => {
-                let addr = addr & 0x01FF;
+                let addr = addr & 0x07FF;
                 self.cpu_memory[addr as usize] = val
             }
             0x2000..=0x3FFF => {
@@ -76,7 +76,8 @@ impl BUS {
             }
         }
     }
-    pub fn mem_read_u16(&self, pos: u16) -> u16{
+
+    pub fn mem_read_u16(&mut self, pos: u16) -> u16{
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         return (hi << 8) | (lo as u16);
@@ -86,5 +87,10 @@ impl BUS {
         let lo = (data & 0xff) as u8; 
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
+    }
+    
+    pub fn load(&mut self, program: Vec<u8>) {
+        self.unmapped[0x0000 .. (0x0000 + program.len())].copy_from_slice(&program[..]); //copia de src: program para self: memory
+        self.mem_write_u16(0xFFFC,0x8000);
     }
 }

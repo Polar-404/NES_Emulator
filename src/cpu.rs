@@ -145,11 +145,12 @@ impl CPU {
     }
     // comandos de controle de memoria
     fn mem_read(&self, addr: u16) -> u8 {
-        self.memory[addr as usize]
+        let val = self.bus.mem_read(addr);
+        val
     }
 
     fn mem_write(&mut self, addr: u16, data: u8) {
-        self.memory[addr as usize] = data;
+        self.bus.mem_write(addr, data);
     }
 
     pub fn load_and_run(&mut self, program: Vec<u8>) {
@@ -160,8 +161,7 @@ impl CPU {
 
     ///writes the program counter to
     pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]); //copia de src: program para self: memory
-        self.mem_write_u16(0xFFFC,0x8000);
+        self.bus.load(program)
     }
 
     ///resets the registers and flags to it's intial values, as well as the program counter to 0xFFFC
@@ -182,6 +182,7 @@ impl CPU {
     ///Then, take only the least significant bits, and set the others to 0. So it writes in reverse order 
     /// 
     ///Therefore writing in little-endian.
+    #[allow(dead_code)]
     fn mem_write_u16(&mut self, pos: u16, data: u16) {
         let hi = (data >> 8) as u8;
         let lo = (data & 0xff) as u8; 
@@ -993,7 +994,7 @@ mod test {
         let mut cpu = CPU::new();
         cpu.mem_write_u16(0x80ff, 0xef);
 
-        assert_eq!(cpu.memory[0x80ff], 0xef);
+        assert_eq!(cpu.bus.mem_read_u16(0x80ff), 0xef);
     }
 
     #[test]
