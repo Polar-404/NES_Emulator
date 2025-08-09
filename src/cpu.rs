@@ -76,7 +76,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(mapper: Box<dyn crate::bus::Mapper>) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -84,7 +84,7 @@ impl CPU {
             status: CpuFlags::from_bits_truncate(0b100100),
             program_counter: 0,
             stack_pointer: STACK_RESET,
-            bus: BUS::new()
+            bus: BUS::new(mapper)
         }
     }
 
@@ -153,16 +153,15 @@ impl CPU {
         self.bus.mem_write(addr, data);
     }
 
-    pub fn load_and_run(&mut self, program: Vec<u8>) {
-        self.load(program);
+    pub fn load_and_run(&mut self, _program: Vec<u8>) {
         self.reset_interrupt();
         self.run()
     }
 
-    ///writes the program counter to
-    pub fn load(&mut self, program: Vec<u8>) {
-        self.bus.load(program)
-    }
+    /////writes the program counter to
+    //pub fn load(&mut self, program: Vec<u8>) {
+    //    self.bus.load(program)
+    //}
 
     ///resets the registers and flags to it's intial values, as well as the program counter to 0xFFFC
     pub fn reset_interrupt(&mut self) {
@@ -919,15 +918,24 @@ impl CPU {
 }
 
 
+
+
+
+
+
+
 ///Simple tests module for the cpu
 #[cfg(test)] //tag de testes
 mod test {
-
+    
+    use crate::dummy_mapper::TestMapper;
     use super::*;
     // ------------------- LDA ------------------
     #[test]
     fn test_0xa9_lda_immediato() {
-        let mut cpu = CPU::new();
+
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
 
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.register_a, 0x05);
@@ -936,7 +944,8 @@ mod test {
     }
     #[test]
     fn test_0xa9_lda_zero_flag() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
 
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert!(cpu.status.contains(CpuFlags::ZERO));
@@ -944,7 +953,9 @@ mod test {
   
     #[test]
     fn test_lda_from_memory() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0x55);
 
         cpu.load_and_run(vec![0xA5, 0x10, 0x00]);
@@ -953,7 +964,9 @@ mod test {
     }
     #[test]
     fn test_ldx_from_memory() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0x55);
 
         cpu.load_and_run(vec![0xA6, 0x10, 0x00]);
@@ -963,7 +976,9 @@ mod test {
 
     #[test]
     fn test_ldy_from_memory() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0x55);
 
         cpu.load_and_run(vec![0xA4, 0x10, 0x00]);
@@ -974,7 +989,8 @@ mod test {
     // ------------------- TAX ------------------
     #[test]
     fn test_0xaa_tax() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
 
         cpu.load_and_run(vec![0xa9, 0x0a, 0xAA, 0x00]); //primeiro inserir LDA, no register A, o valor 0x0a(q é 10)
         //depois coloca esse valor no register x como comando TAX (0xAA), depois break
@@ -983,7 +999,9 @@ mod test {
     // ------------------- INX ------------------
     #[test]
     fn test_0xe8_inx() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0xE8, 0x00]);
 
         assert_eq!(cpu.register_x, 1)
@@ -991,7 +1009,9 @@ mod test {
     // --------------- WRITE MEMORY --------------------
     #[test]
     fn test_write_mem() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write_u16(0x80ff, 0xef);
 
         assert_eq!(cpu.bus.mem_read_u16(0x80ff), 0xef);
@@ -1000,14 +1020,18 @@ mod test {
     #[test]
     // -------------------- ADC ------------------------
     fn test_adc_from_immediate() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         //cpu.mem_write(0x69, data);
         cpu.load_and_run(vec![0x69, 0x10, 0x69, 0x32]);
         assert_eq!(cpu.register_a, 0x42);
     }
     #[test]
     fn test_adc_from_memory() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0xab); //carrega 0xab
         cpu.mem_write(0x20, 0x05); //carrega 0x02
 
@@ -1020,7 +1044,9 @@ mod test {
     }
     #[test]
     fn test_adc_carry_flag() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0xff);
         cpu.mem_write(0x20, 0x01);
         cpu.load_and_run(vec![0xa5, 0x10, 0x65, 0x20, 0x00]);
@@ -1031,7 +1057,9 @@ mod test {
     }
     #[test]
     fn test_adc_carry_sum() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0xff);
         cpu.mem_write(0x20, 0x01);
         cpu.load_and_run(vec![0xa5, 0x10, 0x65, 0x20, 0x69, 0x50, 0x00]);
@@ -1052,7 +1080,9 @@ mod test {
         //const OVERFLOW          = 0b01000000;
         //const NEGATIVE          = 0b10000000;
 
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.status = CpuFlags::from_bits_truncate(0b0100_1101);
 
         //respectivamente [clc, cld, cli, clv]
@@ -1071,7 +1101,9 @@ mod test {
 
     #[test]
     fn test_set_flags() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0x38, 0xF8, 0x78]);
 
         assert!(cpu.status.contains(CpuFlags::CARRY));
@@ -1080,7 +1112,9 @@ mod test {
     }
     #[test]
     fn test_compare() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0x2f);
         cpu.load_and_run(vec![0xa9, 0x2f, 0xC5, 0x10,]);
 
@@ -1090,7 +1124,9 @@ mod test {
     }
     #[test]
     fn test_and_instruction() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+        
         cpu.mem_write(0x10, 0x5C); //0x5C == 0b0101_1100
         cpu.load_and_run(vec![0xa9, 0x1A, 0x25, 0x10,]); //0x1A == 0b0001_1010
         // and == 0b0001_1000
@@ -1098,14 +1134,18 @@ mod test {
     }
     #[test]
     fn test_asl_instruction() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0b0001_0000);
         cpu.load_and_run(vec![0x06, 0x10]);
         assert_eq!(cpu.mem_read(0x10), 0b0010_0000);
     }
     #[test]
     fn test_bcc_instruction() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         // |0x38 - sec | 0x90 - bcc | 0x18 - clc |
         cpu.load_and_run(vec![0x90, 0x03, 0x00, 0x00, 0x00, 0xa9, 0xff, 0x00 ]);
         assert_eq!(cpu.register_a, 0xff);
@@ -1114,7 +1154,9 @@ mod test {
     }
     #[test]
     fn test_bit_instruction() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x20, 0xf3);
         cpu.load_and_run(vec![0xa9, 0xf8, 0x24, 0x20]);
         assert!(!cpu.status.contains(CpuFlags::ZERO));
@@ -1123,14 +1165,18 @@ mod test {
     }
     #[test]
     fn test_decrement_memory() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x50, 0x0f);
         cpu.load_and_run(vec![0xc6, 0x50, 0x00]);
         assert_eq!(cpu.mem_read(0x50), 0x0e);
     }
     #[test]
     fn test_decrement_register() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0xA2, 0x0f, 0xCA, 0xA0, 0x09, 0x88, 0x00]);
 
         assert_eq!(cpu.register_x, 0x0e);
@@ -1138,14 +1184,18 @@ mod test {
     }
     #[test]
     fn test_increment_mem() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x10, 0x0e);
         cpu.load_and_run(vec![0xE6, 0x10, 0x00]);
         assert_eq!(cpu.mem_read(0x10), 0x0f);
     }
     #[test]
     fn test_jump_abs() {
-    let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0x4c, 0x05, 0x80, 0xa9, 0x10, 0xA2, 0x30, 0x00]);
 
         assert_ne!(cpu.register_a, 0x10);
@@ -1153,32 +1203,42 @@ mod test {
     }
     #[test]
     fn test_pha() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+        
         cpu.load_and_run(vec![0xa9, 0xe0, 0x48]);
         assert_eq!(cpu.mem_read((STACK + cpu.stack_pointer as u16).wrapping_add(1)), 0xe0)
     }
     #[test]
     #[should_panic(expected = "tried to pop a empty stack")]
     fn test_pla_panic() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0x68]);
     }
     #[test]
     fn test_pla_correctly() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0xa9, 0xe0, 0x48, 0xa9, 0xd0, 0x48, 0xa9, 0x10, 0x68]);
         assert_eq!(cpu.register_a, 0xd0);
     }
     #[test]
     fn test_eor() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x20, 0xe0);
         cpu.load_and_run(vec![0xa9, 0xA2, 0x45, 0x20]);
         assert_eq!(cpu.register_a ,0b0100_0010);
     }
     #[test]
     fn test_jsr() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![
             0x20, 0x34, 0x12, 0x00  // JSR $1234
         ]);
@@ -1187,7 +1247,8 @@ mod test {
     }
     #[test]
     fn test_register_write() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
         
         cpu.load_and_run(vec![0xA2, 0xe0, 0x86, 0x20]);
         println!("registrador {}",cpu.register_x);
@@ -1195,7 +1256,9 @@ mod test {
     }
     #[test]
     fn test_lsr() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x20, 0xe1);
         cpu.load_and_run(vec![0x46, 0x20]);
         assert!(cpu.status.contains(CpuFlags::CARRY));
@@ -1203,33 +1266,43 @@ mod test {
     }
     #[test]
     fn test_ora_from_mem() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x20, 0xe0);
         cpu.load_and_run(vec![0xa9, 0xa1, 0x05, 0x20]);
         assert_eq!(cpu.register_a, 0b1110_0001);
     }
     #[test]
     fn test_ora_from_immidiate() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0xa9, 0xa1, 0x09, 0xe0]);
         assert_eq!(cpu.register_a, 0b1110_0001);
     }
     #[test]
     fn test_php() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0x08]);
         assert_eq!(cpu.stack_pop(), 0b0011_0100);
     }
     #[test]
     fn test_sbc() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x20, 0x02);
         cpu.load_and_run(vec![0xa9, 0xe0, 0xe5, 0x20]);
         assert_eq!(cpu.register_a, 0xde);
     }
     #[test]
     fn test_rti() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.stack_push(0b0010_0100);
         cpu.stack_push_u16(0x1234);
         
@@ -1241,20 +1314,26 @@ mod test {
     }
     #[test]
     fn test_rol() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.mem_write(0x20, 0xe0);
         cpu.load_and_run(vec![0x26, 0x20]);
         assert_eq!(cpu.mem_read(0x20), 0xc0);
     }
     #[test]
     fn test_txa() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0xa2, 0xe0, 0x8a]);
         assert_eq!(cpu.register_a, 0xe0);
     }
     #[test]
     fn test_tsx() {
-        let mut cpu = CPU::new();
+        let mapper = Box::new(TestMapper::new());
+        let mut cpu = CPU::new(mapper);
+
         cpu.load_and_run(vec![0xba]);
         assert_eq!(cpu.register_x, STACK_RESET);
     }
