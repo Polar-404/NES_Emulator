@@ -102,7 +102,6 @@ impl BUS {
                 self.apu_and_io_functionality[addr as usize]
             }
             0x4020..=0xFFFF => {
-                let addr = addr - 0x4020;
                 self.mapper.read(addr)
                 //self.unmapped[addr as usize]
             }
@@ -128,7 +127,7 @@ impl BUS {
                 self.apu_and_io_functionality[addr as usize] = val
             }
             0x4020..=0xFFFF => {
-                let addr = addr - 0x4020;
+                //passing it's real address(without subtraction) to the mapper to take care of it
                 self.mapper.write(addr, val)
             }
         }

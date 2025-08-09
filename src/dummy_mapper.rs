@@ -1,33 +1,50 @@
+#![allow(unused_variables)]
+
 use crate::bus::Mapper;
 
 pub struct TestMapper {
-    prg_rom: [u8; 0x8000],
-    chr_rom: [u8; 0x2000],
+    ram: [u8; 0x0800],
+    prg_rom: Vec<u8>,
 }
 
 impl TestMapper {
-    // Método de fábrica para criar uma nova instância
-    pub fn new() -> Self {
+    pub fn new(program: Vec<u8>) -> Self {
+        let ram = [0; 0x0800];
+        
+        let mut prg_rom_vec = vec![0; 0x8000];
+        let program_len = program.len();
+        prg_rom_vec[0..program_len].copy_from_slice(&program[..]);
+        
+        let reset_vector = 0x8000;
+        prg_rom_vec[0x7ffc] = (reset_vector & 0xff) as u8;
+        prg_rom_vec[0x7ffd] = (reset_vector >> 8) as u8;
+
         Self {
-            prg_rom: [0; 0x8000],
-            chr_rom: [0; 0x2000],
+            ram,
+            prg_rom: prg_rom_vec,
         }
     }
 }
 
 impl Mapper for TestMapper {
     fn read(&self, addr: u16) -> u8 {
-        self.prg_rom[(addr - 0x8000) as usize]
+        match addr {
+            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize],
+            0x8000..=0xFFFF => self.prg_rom[(addr - 0x8000) as usize],
+            _ => 0,
+        }
     }
+    
     fn write(&mut self, addr: u16, val: u8) {
-        self.prg_rom[(addr - 0x8000) as usize] = val;
+        match addr {
+            0x0000..=0x1FFF => self.ram[(addr & 0x07FF) as usize] = val,
+
+            _ => {},
+        }
     }
 
     fn read_chr(&self, addr: u16) -> u8 {
-        self.chr_rom[addr as usize]
+        0
     }
-
-    fn write_chr(&mut self, addr: u16, val: u8) {
-        self.chr_rom[addr as usize] = val;
-    }
+    fn write_chr(&mut self, addr: u16, val: u8) {}
 }
