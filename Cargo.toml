@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 lazy_static = "1.4.0"
+macroquad = "0.4.14"
 
 [dependencies.bitflags]
 version = "2.9.1"
