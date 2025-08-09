@@ -151,7 +151,7 @@ impl BUS {
     //}
 }
 
-fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
+pub fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
     let rom_data = std::fs::read(path).expect("erro ao extrair a ROM");
     let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);

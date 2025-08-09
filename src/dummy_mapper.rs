@@ -8,7 +8,7 @@ pub struct TestMapper {
 }
 
 impl TestMapper {
-    pub fn new(program: Vec<u8>) -> Self {
+    pub fn new(program: Vec<u8>) -> Box<dyn Mapper>{
         let ram = [0; 0x0800];
         
         let mut prg_rom_vec = vec![0; 0x8000];
@@ -19,10 +19,10 @@ impl TestMapper {
         prg_rom_vec[0x7ffc] = (reset_vector & 0xff) as u8;
         prg_rom_vec[0x7ffd] = (reset_vector >> 8) as u8;
 
-        Self {
+        Box::new(Self {
             ram,
             prg_rom: prg_rom_vec,
-        }
+        })
     }
 }
 
