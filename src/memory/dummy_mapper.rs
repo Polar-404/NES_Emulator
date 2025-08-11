@@ -1,6 +1,6 @@
 #![allow(unused_variables)]
 
-use crate::bus::Mapper;
+use crate::memory::mappers::Mapper;
 
 pub struct TestMapper {
     ram: [u8; 0x0800],

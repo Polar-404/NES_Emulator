@@ -1,58 +1,6 @@
 use core::panic;
 use std::path::Path;
-
-// Bytes	Description
-// 0-3	Constant $4E $45 $53 $1A (ASCII "NES" followed by MS-DOS end-of-file)
-// 4	Size of PRG ROM in 16 KB units
-// 5	Size of CHR ROM in 8 KB units (value 0 means the board uses CHR RAM)
-// 6	Flags 6 – Mapper, mirroring, battery, trainer
-// 7	Flags 7 – Mapper, VS/Playchoice, NES 2.0
-// 8	Flags 8 – PRG-RAM size (rarely used extension)
-// 9	Flags 9 – TV system (rarely used extension)
-// 10	Flags 10 – TV system, PRG-RAM presence (unofficial, rarely used extension)
-// 11-15	Unused padding (should be filled with zero, but some rippers put their name across bytes 7-15)
-
-// 76543210
-// ||||||||
-// |||||||+- Nametable arrangement: 0: vertical arrangement ("horizontal mirrored") (CIRAM A10 = PPU A11)
-// |||||||                          1: horizontal arrangement ("vertically mirrored") (CIRAM A10 = PPU A10)
-// ||||||+-- 1: Cartridge contains battery-backed PRG RAM ($6000-7FFF) or other persistent memory
-// |||||+--- 1: 512-byte trainer at $7000-$71FF (stored before PRG data)
-// ||||+---- 1: Alternative nametable layout
-// ++++----- Lower nybble of mapper number
-pub trait Mapper {
-    fn read(&self, addr: u16) -> u8;
-    
-    // Escreve um byte na ROM do programa (PRG ROM) ou em registradores do mapper.
-    fn write(&mut self, addr: u16, val: u8);
-    
-    // Lê um byte da ROM de caracteres (CHR ROM) para a PPU.
-    fn read_chr(&self, addr: u16) -> u8;
-    
-    // Escreve um byte na RAM de caracteres (CHR RAM) ou em registradores do mapper.
-    fn write_chr(&mut self, addr: u16, val: u8);
-}
-
-pub struct InesMapper000 {
-    prg_rom: Vec<u8>,
-    chr_rom: Vec<u8>
-}
-
-impl Mapper for InesMapper000 {
-    fn read(&self, addr: u16) -> u8 {
-        self.prg_rom[(addr - 0x8000) as usize]
-    }
-    fn write(&mut self, _addr: u16, _val: u8) {
-
-    }
-    fn read_chr(&self, addr: u16) -> u8 {
-        self.chr_rom[addr as usize]
-    }
-    fn write_chr(&mut self, _addr: u16, _val: u8) {
-
-    }
-}
-
+use crate::memory::mappers::*;
 
 pub struct BUS {
 
@@ -132,12 +80,13 @@ impl BUS {
             }
         }
     }
-
+    #[allow(dead_code)]
     pub fn mem_read_u16(&mut self, pos: u16) -> u16{
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         return (hi << 8) | (lo as u16);
     }
+    #[allow(dead_code)]
     pub fn mem_write_u16(&mut self, pos: u16, data: u16) {
         let hi = (data >> 8) as u8;
         let lo = (data & 0xff) as u8; 
@@ -151,9 +100,11 @@ impl BUS {
     //}
 }
 
+#[allow(dead_code)]
 pub fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
+
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
-    let rom_data = std::fs::read(path).expect("erro ao extrair a ROM");
+    let rom_data = std::fs::read(path).expect("Failed to extract ROM");
     let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
 
     match mapper_match {
@@ -176,6 +127,9 @@ pub fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
         }
         1 => {
             panic!("Mapper 1 is not suported yet")
+        }
+        2 => {
+            todo!()
         }
         _ => panic!("The given mapper is not suported yet")
     }

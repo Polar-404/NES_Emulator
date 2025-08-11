@@ -1,6 +1,7 @@
-use crate::cpu::AddressingMode;
+use crate::cpu::cpu::AddressingMode;
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 pub struct OpCode {
     pub code: u8,
     pub mnemonic: &'static str,

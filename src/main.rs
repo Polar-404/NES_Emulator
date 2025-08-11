@@ -1,18 +1,17 @@
-pub mod cpu;
-pub mod opcodes;
-pub mod bus;
-pub mod dummy_mapper;
+mod cpu;
+mod memory;
 
 use macroquad::prelude::*;
+use memory::dummy_mapper::TestMapper;
 
-use crate::{cpu::CPU};
+use crate::{cpu::cpu::CPU};
 
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate bitflags;
 
-#[macroquad::main("My NES Emulator")]
+#[macroquad::main("Nes Emulator")]
 async fn main() {
 
     let mut program: Vec<u8> = vec![0; 0x1FFF];
@@ -21,13 +20,13 @@ async fn main() {
     program[0x0302] = 0x85; // STA $00
     program[0x0303] = 0x00;
     program[0x0304] = 0x4C; // JMP $C000
-    program[0x0305] = 0x00;
-    program[0x0306] = 0xC0;
+    program[0x0305] = 0xff;
+    program[0x0306] = 0x00;
     program[0x03FC] = 0x00; // Vetor de reset para 0xC000
     program[0x03FD] = 0xC0;
 
 
-    let mapper = dummy_mapper::TestMapper::new(program);
+    let mapper = TestMapper::new(program);
     let mut cpu = CPU::new(mapper);
     
     cpu.reset_interrupt();

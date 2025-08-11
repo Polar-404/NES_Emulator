@@ -1,11 +1,13 @@
 // The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
 // Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 
+use macroquad::prelude::warn;
 
-use crate::opcodes;
-use crate::bus::BUS;
+use crate::cpu::opcodes;
+use crate::memory::bus::BUS; 
+use crate::memory::mappers::*;
+
 use std::{collections::HashMap};
-use macroquad::prelude::*;
 
 bitflags! {
 
@@ -78,7 +80,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new(mapper: Box<dyn crate::bus::Mapper>) -> Self {
+    pub fn new(mapper: Box<dyn Mapper>) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -168,7 +170,7 @@ impl CPU {
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
-
+    #[inline]
     fn update_zero_and_negative_flags(&mut self, result:u8) {
         self.status.set(CpuFlags::ZERO, result == 0);
         self.status.set(CpuFlags::NEGATIVE, result & 0b1000_0000 != 0);
@@ -185,7 +187,7 @@ impl CPU {
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
     }
-    
+
     ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
     ///Then, take only the least significant bits, and set the others to 0. 
     ///Finally, return them in reverse order, reading in little-endian.
@@ -344,11 +346,13 @@ impl CPU {
     }
 
     ///Decrement X
+    #[inline]
     fn dex(&mut self) {
         self.register_x = self.register_x.wrapping_sub(1);
         self.update_zero_and_negative_flags(self.register_x);
     }
     ///Decrement Y
+    #[inline]
     fn dey(&mut self) {
         self.register_y = self.register_y.wrapping_sub(1);
         self.update_zero_and_negative_flags(self.register_y);
@@ -427,7 +431,7 @@ impl CPU {
         if location & 0x00FF == 0x00FF {
             // implementação de um bug do 6502 que não rotaciona corretamente os bytes
             // quando o low byte era terminado em FF ele n passava o hi byte para o proximo, 
-            //ao inves disso ele simplesmente dava "wrapping" no low byte
+            // ao inves disso ele simplesmente dava "wrapping" no low byte
             let lo = self.mem_read(location);
             let hi = self.mem_read(location & 0xFF00);
             indirect_ref = (hi as u16) << 8 | (lo as u16);
@@ -438,37 +442,45 @@ impl CPU {
     }
 
     ///SEC - Set Carry
+    #[inline]
     fn sec(&mut self) {
         self.status.insert(CpuFlags::CARRY);
     }
     ///limpa o CARRY flag
+    #[inline]
     fn clc(&mut self) {
         self.status.remove(CpuFlags::CARRY)
     }    
     ///SED - Set Decimal
+    #[inline]
     fn sed(&mut self) {
         self.status.insert(CpuFlags::DECIMAL_MODE);
     }
     ///limpa o DECIMAL_MODE flag
+    #[inline]
     fn cld(&mut self) {
         self.status.remove(CpuFlags::DECIMAL_MODE);
     }
 
     ///SEI - Set Interrupt Disable
+    #[inline]
     fn sei(&mut self) {
         self.status.insert(CpuFlags::INTERRUPT_DISABLE);
     }
 
     ///limpa o INTERRUPT_DISABLE flag
+    #[inline]
     fn cli(&mut self) {
         self.status.remove(CpuFlags::INTERRUPT_DISABLE);
     }
     ///limpa o OVERFLOW flag
+    #[inline]
     fn clv(&mut self) {
         self.status.remove(CpuFlags::OVERFLOW);
     }
 
     /// ---------------- COMANDOS DA STACK ------------ //
+    #[inline]
     fn increment_stack(&mut self) {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
     }
@@ -700,6 +712,8 @@ impl CPU {
     ///Starts looping the instructions, 0x00(BRK) is the only way to break the loop.
     /// 
     ///The program counter by default starts at 0xFFFC, and it will read top to down increasing by the number of bytes of the current instruction
+    #[allow(dead_code)]
+
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
@@ -709,7 +723,8 @@ impl CPU {
             //no need to do anything but maybe some callback or anything useful could be placed here
         }
     }
-  
+
+    #[warn(dead_code)]
     pub fn step<F>(&mut self, mut callback: F) -> bool where F: FnMut(&mut CPU) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -925,10 +940,6 @@ impl CPU {
         true
     }
 
-    pub fn run_test(&mut self) {
-        self.reset_interrupt();
-        self.run()
-    }
 }
 
 
@@ -938,8 +949,16 @@ impl CPU {
 #[cfg(test)]
 mod test {
     
-    use crate::dummy_mapper::TestMapper;
+    use crate::memory::dummy_mapper::TestMapper;
     use super::*;
+
+    impl CPU {
+        pub fn run_test(&mut self) {
+            self.reset_interrupt();
+            self.run()
+        }
+    }
+
     // ------------------- LDA ------------------
     #[test]
     fn test_0xa9_lda_immediate() {
