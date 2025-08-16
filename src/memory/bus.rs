@@ -1,13 +1,13 @@
 use core::panic;
 use std::path::Path;
 use crate::memory::mappers::*;
+use crate::ppu::ppu::PPU;
 
 pub struct BUS {
 
     //[https://www.nesdev.org/wiki/CPU_memory_map]
 
     cpu_memory: [u8; 0x0800],
-    ppu_registers: [u8; 0x08],
     nes_apu_and_io_registers: [u8; 0x18],
 
     ///APU and I/O functionality that is normally disabled.
@@ -17,17 +17,17 @@ pub struct BUS {
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
     mapper: Box<dyn Mapper>,
+    ppu: PPU,
 }
 impl BUS {
     
     pub fn new(mapper: Box<dyn Mapper>) -> Self {
         BUS {
             cpu_memory: [0; 0x0800],
-            ppu_registers: [0; 0x08],
             nes_apu_and_io_registers: [0; 0x18],
             apu_and_io_functionality: [0; 0x08], 
             mapper,
-            // ppu: PPU:new()
+            ppu: PPU::new(),
         }
     }
     
@@ -38,8 +38,8 @@ impl BUS {
                 self.cpu_memory[addr as usize]
             }
             0x2000..=0x3FFF => {
-                let addr = addr & 0x0007;
-                self.ppu_registers[addr as usize]
+                let addr: u8 = (addr & 0x07) as u8;
+                self.ppu.read_registers(addr)
             }
             0x4000..=0x4017 => {
                 let addr = addr - 0x4000;
@@ -64,7 +64,7 @@ impl BUS {
             }
             0x2000..=0x3FFF => {
                 let addr = addr & 0x0007;
-                self.ppu_registers[addr as usize] = val
+                self.ppu.write_registers(addr, val);
             }
             0x4000..=0x4017 => {
                 let addr = addr - 0x4000;

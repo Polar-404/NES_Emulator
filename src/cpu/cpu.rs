@@ -58,7 +58,7 @@ pub struct CPU {
     pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
-    bus: BUS
+    pub bus: BUS
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]

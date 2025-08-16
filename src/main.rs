@@ -1,5 +1,6 @@
 mod cpu;
 mod memory;
+mod ppu;
 
 use macroquad::prelude::*;
 use memory::dummy_mapper::TestMapper;

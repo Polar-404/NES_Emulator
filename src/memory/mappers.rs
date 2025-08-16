@@ -1,4 +1,3 @@
-
 // Bytes	Description
 // 0-3	Constant $4E $45 $53 $1A (ASCII "NES" followed by MS-DOS end-of-file)
 // 4	Size of PRG ROM in 16 KB units
