@@ -1,5 +1,7 @@
 #![allow(unused_variables)]
 
+use std::{cell::RefCell, rc::Rc};
+
 use crate::memory::mappers::Mapper;
 
 pub struct TestMapper {
@@ -8,7 +10,7 @@ pub struct TestMapper {
 }
 
 impl TestMapper {
-    pub fn new(program: Vec<u8>) -> Box<dyn Mapper>{
+    pub fn new(program: Vec<u8>) -> Rc<RefCell<Box<dyn Mapper>>>{
         let ram = [0; 0x0800];
         
         let mut prg_rom_vec = vec![0; 0x8000];
@@ -19,10 +21,12 @@ impl TestMapper {
         prg_rom_vec[0x7ffc] = (reset_vector & 0xff) as u8;
         prg_rom_vec[0x7ffd] = (reset_vector >> 8) as u8;
 
-        Box::new(Self {
-            ram,
-            prg_rom: prg_rom_vec,
-        })
+        Rc::new(
+            RefCell::new(
+                Box::new(Self {
+                    ram,
+                    prg_rom: prg_rom_vec,
+        })))
     }
 }
 

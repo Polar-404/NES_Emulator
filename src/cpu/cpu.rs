@@ -9,6 +9,9 @@ use crate::memory::mappers::*;
 
 use std::{collections::HashMap};
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 bitflags! {
 
     /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
@@ -80,7 +83,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new(mapper: Box<dyn Mapper>) -> Self {
+    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -148,7 +151,7 @@ impl CPU {
         }
     }
     // comandos de controle de memoria
-    fn mem_read(&self, addr: u16) -> u8 {
+    fn mem_read(&mut self, addr: u16) -> u8 {
         let val = self.bus.mem_read(addr);
         val
     }

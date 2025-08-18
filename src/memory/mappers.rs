@@ -19,6 +19,8 @@
 // ++++----- Lower nybble of mapper number
 
 #[allow(dead_code)] //TODO temporario só pra ele parar de encher o saco
+
+
 pub trait Mapper {
     fn read(&self, addr: u16) -> u8;
 

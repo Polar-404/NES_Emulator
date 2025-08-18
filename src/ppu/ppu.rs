@@ -30,6 +30,10 @@
 //  |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
 //  +--------- Vblank NMI enable (0: off, 1: on)
 
+use crate::{memory::mappers::Mapper, ppu::ppubus::PPUBUS};
+use std::rc::Rc;
+use std::cell::RefCell;
+
 bitflags! {
     #[derive(Debug)]
     pub struct PpuCtrlFlags: u8 {
@@ -44,11 +48,25 @@ bitflags! {
     }
 }
 
+bitflags! {
+    #[derive(Debug)]
+    pub struct PpuStatusFlags: u8 {
+        const x1                = 0b00000001; //(PPU open bus or 2C05 PPU identifier)
+        const x2                = 0b00000010; //(PPU open bus or 2C05 PPU identifier)
+        const x3                = 0b00000100; //(PPU open bus or 2C05 PPU identifier)
+        const x4                = 0b00001000; //(PPU open bus or 2C05 PPU identifier)
+        const x5                = 0b00010000; //(PPU open bus or 2C05 PPU identifier)
+        const SpriteOverflow    = 0b00100000; //Sprite overflow flag
+        const Sprite0hit        = 0b01000000; //Sprite 0 hit flag
+        const VblankFlag        = 0b10000000; //Vblank flag, cleared on read. Unreliable;
+    }
+}
+
 pub struct PPU {
 
     ppu_ctrl:   PpuCtrlFlags,
     ppu_mask:   u8,
-    ppu_status: u8,
+    ppu_status: PpuStatusFlags,
     oam_addr:   u8,
     oam_data:   u8,
     ppu_scrl:   u8,
@@ -56,28 +74,24 @@ pub struct PPU {
     ppu_data:   u8,
 
     oam_dma:    u8, //[0x4014] adress
-
-    ////32 byte pallete [16 for backgroudn 16 for foreground]
-    //palette_ram: [u8; 0x20], 
-
-    ////stores object atributes such as position, orientatiom pallete, etc...
-    //oam: [u8; 0xff], //256 bytes(up to 64 sprites)
-
-    //vram: [u8; 0x0800], // 2KB VRAM
+    ppubus:     PPUBUS,
 }
 
 impl PPU {
-    pub fn new() -> Self {
+    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
         PPU {
             ppu_ctrl:   PpuCtrlFlags::from_bits_truncate(0b0000_0000),
+            ppu_status: PpuStatusFlags::from_bits_truncate(0b0000_0000),
+
             ppu_mask:   0,
-            ppu_status: 0,
             oam_addr:   0,
             oam_data:   0,
             ppu_scrl:   0,
             ppu_addr:   0,
             ppu_data:   0,
             oam_dma:    0,
+
+            ppubus:     PPUBUS::new(mapper)
 
             //TODO implementar isso no BUS
             // palette_ram: [0, 0x20],
@@ -87,7 +101,7 @@ impl PPU {
     }
 
 
-    pub fn read_registers(&self, addr: u8) -> u8 {
+    pub fn read_registers(&mut self, addr: u8) -> u8 {
         match addr {
             0 => {
                 self.ppu_ctrl.bits()
@@ -96,7 +110,8 @@ impl PPU {
                 self.ppu_mask
             }
             2 => {
-                self.ppu_status
+                self.ppu_status.remove(PpuStatusFlags::VblankFlag);
+                self.ppu_status.bits()
             }
             3 => {
                 self.oam_addr
@@ -120,13 +135,13 @@ impl PPU {
     pub fn write_registers(&mut self, addr: u16, data: u8) {
         match addr {
             0 => {
-                self.ppu_ctrl = PpuCtrlFlags::from_bits_truncate(data)
+                self.ppu_ctrl   = PpuCtrlFlags::from_bits_truncate(data)
             }
             1 => {
                 self.ppu_mask   = data
             }
             2 => {
-                self.ppu_status = data
+                self.ppu_status = PpuStatusFlags::from_bits_truncate(data)
             }
             3 => {
                 self.oam_addr   = data

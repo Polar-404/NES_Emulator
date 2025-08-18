@@ -3,6 +3,9 @@ use std::path::Path;
 use crate::memory::mappers::*;
 use crate::ppu::ppu::PPU;
 
+use std::rc::Rc; // Importe Rc
+use std::cell::RefCell;
+
 pub struct BUS {
 
     //[https://www.nesdev.org/wiki/CPU_memory_map]
@@ -16,22 +19,22 @@ pub struct BUS {
     ///Unmapped. Available for cartridge use.
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
-    mapper: Box<dyn Mapper>,
+    mapper: Rc<RefCell<Box<dyn Mapper>>>,
     ppu: PPU,
 }
 impl BUS {
     
-    pub fn new(mapper: Box<dyn Mapper>) -> Self {
+    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
         BUS {
             cpu_memory: [0; 0x0800],
             nes_apu_and_io_registers: [0; 0x18],
             apu_and_io_functionality: [0; 0x08], 
-            mapper,
-            ppu: PPU::new(),
+            mapper: Rc::clone(&mapper),
+            ppu: PPU::new(mapper),
         }
     }
     
-    pub fn mem_read(&self, addr: u16) -> u8 {
+    pub fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x1FFF => {
                 let addr = addr & 0x07FF;
@@ -50,7 +53,7 @@ impl BUS {
                 self.apu_and_io_functionality[addr as usize]
             }
             0x4020..=0xFFFF => {
-                self.mapper.read(addr)
+                self.mapper.borrow().read(addr)
                 //self.unmapped[addr as usize]
             }
         }
@@ -76,7 +79,7 @@ impl BUS {
             }
             0x4020..=0xFFFF => {
                 //passing it's real address(without subtraction) to the mapper to take care of it
-                self.mapper.write(addr, val)
+                self.mapper.borrow_mut().write(addr, val)
             }
         }
     }
