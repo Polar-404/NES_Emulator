@@ -20,7 +20,7 @@ pub struct BUS {
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
     mapper: Rc<RefCell<Box<dyn Mapper>>>,
-    ppu: PPU,
+    pub ppu: PPU,
 }
 impl BUS {
     
@@ -137,3 +137,4 @@ pub fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
         _ => panic!("The given mapper is not suported yet")
     }
 }
+

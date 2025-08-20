@@ -43,7 +43,7 @@ bitflags! {
         const SpritePattern           = 0b00001000; //Sprite pattern table address for 8x8 sprites (0: $0000; 1: $1000; ignored in 8x16 mode)
         const BackGroundPattern       = 0b00010000; //Background pattern table address (0: $0000; 1: $1000) Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
         const SpriteSize              = 0b00100000; //Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
-        const PPUMasterSlaveSelect   = 0b01000000; //PPU master/slave select
+        const PPUMasterSlaveSelect    = 0b01000000; //PPU master/slave select
         const VblankNMI               = 0b10000000; //Vblank NMI enable (0: off, 1: on)
     }
 }
@@ -51,30 +51,57 @@ bitflags! {
 bitflags! {
     #[derive(Debug)]
     pub struct PpuStatusFlags: u8 {
-        const x1                = 0b00000001; //(PPU open bus or 2C05 PPU identifier)
-        const x2                = 0b00000010; //(PPU open bus or 2C05 PPU identifier)
-        const x3                = 0b00000100; //(PPU open bus or 2C05 PPU identifier)
-        const x4                = 0b00001000; //(PPU open bus or 2C05 PPU identifier)
-        const x5                = 0b00010000; //(PPU open bus or 2C05 PPU identifier)
+        const X1                = 0b00000001; //(PPU open bus or 2C05 PPU identifier)
+        const X2                = 0b00000010; //(PPU open bus or 2C05 PPU identifier)
+        const X3                = 0b00000100; //(PPU open bus or 2C05 PPU identifier)
+        const X4                = 0b00001000; //(PPU open bus or 2C05 PPU identifier)
+        const X5                = 0b00010000; //(PPU open bus or 2C05 PPU identifier)
         const SpriteOverflow    = 0b00100000; //Sprite overflow flag
         const Sprite0hit        = 0b01000000; //Sprite 0 hit flag
         const VblankFlag        = 0b10000000; //Vblank flag, cleared on read. Unreliable;
     }
 }
+struct DoubleWriteRegister {
+    pub value: u16,
+    pub is_first_write: bool,
+}
+impl DoubleWriteRegister {
+    pub fn new() -> Self {
+        DoubleWriteRegister {
+            value: 0,
+            is_first_write: true,
+        }
+    }
+    
+    // Método para a PPU escrever nele
+    pub fn write_byte(&mut self, data: u8) {
+        if self.is_first_write {
+            self.value = ((data as u16) << 8) | (self.value & 0x00FF);
+        } else {
+            self.value = (self.value & 0xFF00) | (data as u16);
+        }
+        self.is_first_write = !self.is_first_write;
+    }
+    
+    // Método para resetar o estado de escrita dupla (chamado pela leitura de $2002)
+    pub fn reset_latch(&mut self) {
+        self.is_first_write = true;
+    }
+}
 
 pub struct PPU {
 
-    ppu_ctrl:   PpuCtrlFlags,
-    ppu_mask:   u8,
-    ppu_status: PpuStatusFlags,
-    oam_addr:   u8,
-    oam_data:   u8,
-    ppu_scrl:   u8,
-    ppu_addr:   u8,
-    ppu_data:   u8,
+    pub ppu_ctrl:   PpuCtrlFlags,
+    pub ppu_mask:   u8,
+    pub ppu_status: PpuStatusFlags,
+    pub oam_addr:   u8,
+    pub oam_data:   u8,
+    pub ppu_scrl:   DoubleWriteRegister,
+    pub ppu_addr:   DoubleWriteRegister,
+    pub ppu_data:   u8,
 
-    oam_dma:    u8, //[0x4014] adress
-    ppubus:     PPUBUS,
+    pub oam_dma:    u8, //[0x4014] adress
+    pub ppubus:     PPUBUS,
 }
 
 impl PPU {
@@ -86,17 +113,12 @@ impl PPU {
             ppu_mask:   0,
             oam_addr:   0,
             oam_data:   0,
-            ppu_scrl:   0,
-            ppu_addr:   0,
+            ppu_scrl:   DoubleWriteRegister::new(),
+            ppu_addr:   DoubleWriteRegister::new(),
             ppu_data:   0,
             oam_dma:    0,
 
             ppubus:     PPUBUS::new(mapper)
-
-            //TODO implementar isso no BUS
-            // palette_ram: [0, 0x20],
-            // oam:    [0, 0xff],
-            // vram:   [0, 0x0800],
         }
     }
 
@@ -110,8 +132,11 @@ impl PPU {
                 self.ppu_mask
             }
             2 => {
+                let data = self.ppu_status.bits();
                 self.ppu_status.remove(PpuStatusFlags::VblankFlag);
-                self.ppu_status.bits()
+                self.ppu_addr.reset_latch();
+                self.ppu_scrl.reset_latch();
+                data
             }
             3 => {
                 self.oam_addr
@@ -120,10 +145,12 @@ impl PPU {
                 self.oam_data
             }
             5 => {
-                self.ppu_scrl
+                //cpu cant read from this register
+                //TODO remember to make a read_function just for the PPU to read its own BUS
+                panic!("Error, CPU tried to read PPU REGISTER 2005, which is for write only")
             }
             6 => {
-                self.ppu_addr
+                panic!("Error, CPU tried to read PPU REGISTER 2006, which is for write only")
             }
             7 => {
                 self.ppu_data
@@ -150,10 +177,10 @@ impl PPU {
                 self.oam_data   = data
             }
             5 => {
-                self.ppu_scrl   = data
+                self.ppu_scrl.write_byte(data);
             }
             6 => {
-                self.ppu_addr   = data
+                self.ppu_addr.write_byte(data);
             }
             7 => {
                 self.ppu_data   = data

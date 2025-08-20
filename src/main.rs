@@ -48,12 +48,19 @@ async fn debbuger_info(cpu: &mut CPU) {
     
         if show_debug_info {
             let pos_x: f32 = 100.0;
-            let pos_y: f32 = 100.0;
+            let mut pos_y: f32 = 100.0;
+            let line_height = 20.0;
             draw_text(&format!("STATUS: {:?}", cpu.status), pos_x, pos_y, 20.0, WHITE);
-            draw_text(&format!("PC: {:#06x}", cpu.program_counter), pos_x, pos_y + 20.0, 20.0, WHITE);
-            draw_text(&format!("Register A: {:#06x}", cpu.register_a), pos_x, pos_y + 40.0, 20.0, WHITE);
-            draw_text(&format!("Register X: {:#06x}", cpu.register_x), pos_x, pos_y + 60.0, 20.0, WHITE);
-            draw_text(&format!("Register Y: {:#06x}", cpu.register_y), pos_x, pos_y + 80.0, 20.0, WHITE);
+            pos_y += line_height;
+            draw_text(&format!("PC: {:#06x}", cpu.program_counter), pos_x, pos_y, 20.0, WHITE);
+            pos_y += line_height;
+            draw_text(&format!("Register A: {:#06x}", cpu.register_a), pos_x, pos_y, 20.0, WHITE);
+            pos_y += line_height;
+            draw_text(&format!("Register X: {:#06x}", cpu.register_x), pos_x, pos_y, 20.0, WHITE);
+            pos_y += line_height;
+            draw_text(&format!("Register Y: {:#06x}", cpu.register_y), pos_x, pos_y, 20.0, WHITE);
+            pos_y += line_height; 
+            draw_text(&format!("PPU INFO {:#06x}:", cpu.bus.ppu.oam_data), pos_x, pos_y, 20.0, WHITE);
         }
 
         next_frame().await

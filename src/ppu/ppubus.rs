@@ -2,6 +2,10 @@ use crate::memory::mappers::Mapper;
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
 
+struct vram {
+    vram_state: u8
+}
+
 pub struct PPUBUS {
     //32 byte pallete [16 for backgroudn 16 for foreground]
     palette_ram: [u8; 0x20],
