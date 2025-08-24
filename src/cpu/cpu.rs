@@ -61,7 +61,8 @@ pub struct CPU {
     pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
-    pub bus: BUS
+    pub bus: BUS,
+    nmi: bool
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -91,7 +92,8 @@ impl CPU {
             status: CpuFlags::from_bits_truncate(0b100100),
             program_counter: 0,
             stack_pointer: STACK_RESET,
-            bus: BUS::new(mapper)
+            bus: BUS::new(mapper),
+            nmi: false
         }
     }
 
@@ -934,6 +936,13 @@ impl CPU {
             //BRK
             0x00 => return false,
             _ => todo!()
+        }
+        for _ in 0..opcode.cycles {
+            for _ in 0..3 {
+                if self.bus.ppu.tick() {
+                    self.nmi = true;
+                }
+            }
         }
 
         //increments the program counter accordingly to how many cicles the opcode is specified at the hashmap
