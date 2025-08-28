@@ -62,6 +62,7 @@ pub struct CPU {
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
     pub bus: BUS,
+    
     nmi: bool
 }
 #[derive(Debug)]
@@ -735,6 +736,18 @@ impl CPU {
 
         callback(self);
 
+        if self.nmi {
+            //sends the nmi interuption to the cpu
+            self.stack_push_u16(self.program_counter);
+            self.status.insert(CpuFlags::BREAK | CpuFlags::BREAK2);
+            self.php(); //push processor status
+
+            self.status.insert(CpuFlags::INTERRUPT_DISABLE);
+
+            self.program_counter = self.bus.mem_read_u16(0xFFFA);
+            self.nmi = false; // Limpa a flag NMI
+        }
+
         let code = self.mem_read(self.program_counter);
         self.program_counter += 1;
 
@@ -742,6 +755,10 @@ impl CPU {
 
 
         let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido", code));
+
+        if self.bus.tick(opcode.cycles) {
+            self.nmi = true;
+        }
 
         match code{
             //LDA
@@ -936,13 +953,6 @@ impl CPU {
             //BRK
             0x00 => return false,
             _ => todo!()
-        }
-        for _ in 0..opcode.cycles {
-            for _ in 0..3 {
-                if self.bus.ppu.tick() {
-                    self.nmi = true;
-                }
-            }
         }
 
         //increments the program counter accordingly to how many cicles the opcode is specified at the hashmap

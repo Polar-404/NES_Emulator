@@ -2,7 +2,7 @@ use crate::memory::mappers::Mapper;
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
 
-struct vram {
+struct Vram {
     vram_state: u8
 }
 

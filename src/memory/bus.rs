@@ -21,6 +21,7 @@ pub struct BUS {
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
     mapper: Rc<RefCell<Box<dyn Mapper>>>,
     pub ppu: PPU,
+    cycles: u64,
 }
 impl BUS {
     
@@ -31,6 +32,7 @@ impl BUS {
             apu_and_io_functionality: [0; 0x08], 
             mapper: Rc::clone(&mapper),
             ppu: PPU::new(mapper),
+            cycles: 0,
         }
     }
     
@@ -84,7 +86,7 @@ impl BUS {
         }
     }
     #[allow(dead_code)]
-    pub fn mem_read_u16(&mut self, pos: u16) -> u16{
+    pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         return (hi << 8) | (lo as u16);
@@ -95,6 +97,11 @@ impl BUS {
         let lo = (data & 0xff) as u8; 
         self.mem_write(pos, lo);
         self.mem_write(pos + 1, hi);
+    }
+
+    pub fn tick(&mut self, cycles: u8) -> bool {
+        self.cycles += cycles as u64;
+        self.ppu.tick(cycles * 3)
     }
     
     //pub fn load(&mut self, program: Vec<u8>) {

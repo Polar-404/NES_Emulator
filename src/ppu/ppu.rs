@@ -61,7 +61,7 @@ bitflags! {
         const VblankFlag        = 0b10000000; //Vblank flag, cleared on read. Unreliable;
     }
 }
-struct DoubleWriteRegister {
+pub struct DoubleWriteRegister {
     pub value: u16,
     pub is_first_write: bool,
 }
@@ -90,6 +90,10 @@ impl DoubleWriteRegister {
 }
 
 pub struct PPU {
+    pub cycle: u16,
+    pub scanline: u16,
+    pub frame_complete: bool,
+    pub frame_buffer: Vec<u8>, // [u8; 256 * 240 * 4], HAS TO ALOCATE ON THE HEAP OTHERWISE IT OVERFLOWS THE STACK
 
     pub ppu_ctrl:   PpuCtrlFlags,
     pub ppu_mask:   u8,
@@ -107,6 +111,11 @@ pub struct PPU {
 impl PPU {
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
         PPU {
+            cycle: 0,
+            scanline: 0,
+            frame_complete: false,
+            frame_buffer: vec![0; 256 * 240 * 4],
+
             ppu_ctrl:   PpuCtrlFlags::from_bits_truncate(0b0000_0000),
             ppu_status: PpuStatusFlags::from_bits_truncate(0b0000_0000),
 
@@ -162,7 +171,8 @@ impl PPU {
     pub fn write_registers(&mut self, addr: u16, data: u8) {
         match addr {
             0 => {
-                self.ppu_ctrl   = PpuCtrlFlags::from_bits_truncate(data)
+                let before_nmi_status = self.ppu_ctrl.generate_vblank_nmi();
+                self.ppu_ctrl = PpuCtrlFlags::from_bits_truncate(data)
             }
             1 => {
                 self.ppu_mask   = data
@@ -187,6 +197,54 @@ impl PPU {
             }
             _ => panic!("um endereço invalido foi chamado: {}", addr)
         }
+    }
+    
+    ///RETURNS IF A NMI (Non-Maskable Interrupt) SHOULD BE ACTIVATED (which starts a VBLANK)
+    ///the ppu displays a 256x240 resolution, even though the ppu works at a bigger resolution than that' 
+    ///the nes ppu makes 340 cycles per scanline
+    ///and 260 scanlines(one for each horizontal line of pixels)
+    pub fn tick(&mut self, cycles: u8) -> bool {
+        self.cycle += cycles as u16;
+
+        if self.scanline < 240 && self.cycle < 256 {
+            let pixel_index = (self.scanline as usize * 256 + self.cycle as usize) * 4; // RGBA
+            if pixel_index + 3 < self.frame_buffer.len() {
+                let color_val = if (self.cycle / 8 + self.scanline / 8) % 2 == 0 { 255 } else { 0 };
+                self.frame_buffer[pixel_index] = color_val;     // Red
+                self.frame_buffer[pixel_index + 1] = color_val; // Green
+                self.frame_buffer[pixel_index + 2] = color_val; // Blue
+                self.frame_buffer[pixel_index + 3] = 255;       // Alpha
+            }
+        }
+        
+        self.cycle += 1;
+
+        //starting Vblank (scanline 241)
+        if self.cycle > 340 {
+            self.cycle = 0;
+            self.scanline += 1;
+
+            if self.scanline == 241 {
+                self.ppu_status.insert(PpuStatusFlags::VblankFlag);
+                self.frame_complete = true;
+
+                if self.ppu_ctrl.contains(PpuCtrlFlags::VblankNMI) {
+                    return true
+                }
+            }
+            
+            //end of frame (scanline 261) restarts to the next frame
+            if self.scanline > 261 {
+                self.scanline = 0;
+                self.ppu_status.remove(PpuStatusFlags::VblankFlag);
+                self.ppu_status.remove(PpuStatusFlags::Sprite0hit);
+                self.ppu_status.remove(PpuStatusFlags::SpriteOverflow);
+
+            }
+        }
+
+        false
+
     }
 }
 
