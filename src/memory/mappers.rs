@@ -40,15 +40,30 @@ pub struct InesMapper000 {
 
 impl Mapper for InesMapper000 {
     fn read(&self, addr: u16) -> u8 {
-        self.prg_rom[(addr - 0x8000) as usize]
+        match addr {
+            0x8000..=0xFFFF => {
+                let prg_len = self.prg_rom.len();
+                let index = (addr - 0x8000) as usize;
+
+                if prg_len == 0x8000 {
+                    self.prg_rom[index]
+                } else {
+                    self.prg_rom[index % 0x4000]
+                }
+            }
+            _ => 0, 
+        }
     }
+
     fn write(&mut self, _addr: u16, _val: u8) {
 
     }
+
     fn read_chr(&self, addr: u16) -> u8 {
         self.chr_rom[addr as usize]
     }
+    
     fn write_chr(&mut self, _addr: u16, _val: u8) {
-
+        panic!("Tried to write to CHR ROM on Mapper 000!");
     }
 }

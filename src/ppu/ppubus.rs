@@ -23,4 +23,7 @@ impl PPUBUS {
             mapper,
         }
     }
+    pub fn write_vram(&mut self, addr: u16, data: u8) {
+        self.vram[addr as usize] = data
+    }
 }

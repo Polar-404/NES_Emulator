@@ -2,32 +2,49 @@ mod cpu;
 mod memory;
 mod ppu;
 
+use std::path::Path;
+
 use macroquad::prelude::*;
 use memory::dummy_mapper::TestMapper;
 
-use crate::{cpu::cpu::CPU};
+use crate::{cpu::cpu::CPU, memory::mappers::InesMapper000};
 
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate bitflags;
 
-#[macroquad::main("Nes Emulator")]
+const MULTIPLY: i32 = 2;
+
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "NES Emulator".to_owned(),
+        window_width: 720 * MULTIPLY,  // Largura da janela em pixels (ex: 256 * 2)
+        window_height: 480 * MULTIPLY, // Altura da janela em pixels (ex: 240 * 2)
+        // Outras configurações que você pode querer ajustar:
+        high_dpi: true,
+        fullscreen: false,
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(window_conf())]
 async fn main() {
 
-    let mut program: Vec<u8> = vec![0; 0x1FFF];
-    program[0x0300] = 0xA9; // LDA #$0A
-    program[0x0301] = 0x0A;
-    program[0x0302] = 0x85; // STA $00
-    program[0x0303] = 0x00;
-    program[0x0304] = 0x4C; // JMP $C000
-    program[0x0305] = 0xff;
-    program[0x0306] = 0x00;
-    program[0x03FC] = 0x00; // Vetor de reset para 0xC000
-    program[0x03FD] = 0xC0;
+    // let mut program: Vec<u8> = vec![0; 0x1FFF];
+    // program[0x0300] = 0xA9; // LDA #$0A
+    // program[0x0301] = 0x0A;
+    // program[0x0302] = 0x85; // STA $00
+    // program[0x0303] = 0x00;
+    // program[0x0304] = 0x4C; // JMP $C000
+    // program[0x0305] = 0xff;
+    // program[0x0306] = 0x00;
+    // program[0x03FC] = 0x00; // Vetor de reset para 0xC000
+    // program[0x03FD] = 0xC0;
 
+    //let mapper = memory::bus::load_rom_from_file(Path::new("NES_GAMES/Crisis Force (Japan).nes"));
 
-    let mapper = TestMapper::new(program);
+    let mapper = memory::bus::load_rom_from_file(Path::new("NES_GAMES/Mario/Super Mario Bros. (World).nes"));
     let mut cpu = CPU::new(mapper);
     
     cpu.reset_interrupt();
@@ -45,8 +62,13 @@ async fn debbuger_info(cpu: &mut CPU) {
     loop {
         clear_background(BLUE);
 
-        cpu.step(|_| {}); // `cpu.step` já chama `ppu.tick()` internamente
+        //TODO lembrar de colocar isso aqui de volta depois
+        //while !cpu.bus.ppu.frame_complete {
+        //    cpu.step(|_| {});
+        //}
 
+        cpu.step(|_| {});
+        
         if cpu.bus.ppu.frame_complete {
             // Copie os dados do frame_buffer da PPU para a imagem do Macroquad
             // O `frame_buffer` da PPU é RGBA, então podemos copiá-lo diretamente
@@ -60,29 +82,29 @@ async fn debbuger_info(cpu: &mut CPU) {
         // Você pode ajustar a posição e o tamanho (dest_size) conforme necessário
         draw_texture_ex(
             &ppu_texture,
-            0.0, // Posição X
-            0.0, // Posição Y
-            GREEN, // Cor de tint (WHITE para não alterar as cores da textura)
+            0.0,
+            0.0,
+            YELLOW,
             DrawTextureParams {
-                // Ajuste o dest_size para escalar a tela do NES (256x240)
-                // Por exemplo, para dobrar o tamanho: 256*2, 240*2
-                dest_size: Some(vec2(256.0 * 2.0, 240.0 * 2.0)), 
+                dest_size: Some(vec2(256.0 * (2.0 * MULTIPLY as f32), 240.0 * (2.0 * MULTIPLY as f32))), 
                 ..Default::default()
             },
         );
         
         if is_key_pressed(KeyCode::F1) {
+            //TODO ver um jeito de ajustar para escalar a janela para o tamanho certo
+            // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
             show_debug_info = !show_debug_info;
         }
     
         if show_debug_info {
-            let pos_x: f32 = 10.0; // Posição X para informações de depuração
+            let pos_x: f32 = 520.0 * MULTIPLY as f32; // Posição X para informações de depuração
             let mut pos_y: f32 = 30.0; // Posição Y inicial
-            let line_height = 15.0; // Altura da linha para espaçamento
-            let font_size = 15.0; // Tamanho da fonte
+            let line_height = 30.0; // Altura da linha para espaçamento
+            let font_size = 30.0; // Tamanho da fonte
 
-            // Exemplo de informações da CPU
-            draw_text(&format!("CPU STATUS: {:?}", cpu.status), pos_x, pos_y, font_size, WHITE);
+            // Dentro da sua função debbuger_info
+            draw_text(&format!("STATUS: {}", CPU::format_cpu_status(cpu.status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("PC: {:#06x}", cpu.program_counter), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
@@ -105,7 +127,7 @@ async fn debbuger_info(cpu: &mut CPU) {
             pos_y += line_height;
             draw_text(&format!("PPU Cycle: {} | Scanline: {}", cpu.bus.ppu.cycle, cpu.bus.ppu.scanline), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
-            draw_text(&format!("PPU STATUS: {:?}", cpu.bus.ppu.ppu_status), pos_x, pos_y, font_size, WHITE);
+            draw_text(&format!("PPU STATUS: {:?}", cpu.bus.ppu.format_ppu_status(cpu.bus.ppu.ppu_status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("Frame Complete: {:?}", cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
         }

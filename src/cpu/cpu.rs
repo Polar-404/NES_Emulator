@@ -962,10 +962,20 @@ impl CPU {
         true
     }
 
+    pub fn format_cpu_status(status: u8) -> String {
+        let mut s = String::new();
+        s.push_str(if (status & 0b10000000) != 0 { "N" } else { "-" });
+        s.push_str(if (status & 0b01000000) != 0 { "V" } else { "-" });
+        s.push_str("-"); // Ignored bit
+        s.push_str(if (status & 0b00010000) != 0 { "B" } else { "-" });
+        s.push_str(if (status & 0b00001000) != 0 { "D" } else { "-" });
+        s.push_str(if (status & 0b00000100) != 0 { "I" } else { "-" });
+        s.push_str(if (status & 0b00000010) != 0 { "Z" } else { "-" });
+        s.push_str(if (status & 0b00000001) != 0 { "C" } else { "-" });
+        s
+    }
+
 }
-
-
-
 
 ///Simple tests module for the cpu
 #[cfg(test)]

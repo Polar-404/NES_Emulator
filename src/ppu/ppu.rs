@@ -47,6 +47,14 @@ bitflags! {
         const VblankNMI               = 0b10000000; //Vblank NMI enable (0: off, 1: on)
     }
 }
+impl PpuCtrlFlags {
+    pub fn new() -> Self {
+        PpuCtrlFlags::from_bits_truncate(0b0000_0000)
+    }
+    pub fn generate_vblank_nmi(&self) -> bool {
+        return self.contains(PpuCtrlFlags::VblankNMI);
+    }
+}
 
 bitflags! {
     #[derive(Debug)]
@@ -61,6 +69,12 @@ bitflags! {
         const VblankFlag        = 0b10000000; //Vblank flag, cleared on read. Unreliable;
     }
 }
+impl PpuStatusFlags {
+    pub fn new() -> Self {
+        PpuStatusFlags::from_bits_truncate(0b0000_0000)
+    }
+}
+
 pub struct DoubleWriteRegister {
     pub value: u16,
     pub is_first_write: bool,
@@ -89,6 +103,7 @@ impl DoubleWriteRegister {
     }
 }
 
+
 pub struct PPU {
     pub cycle: u16,
     pub scanline: u16,
@@ -116,8 +131,8 @@ impl PPU {
             frame_complete: false,
             frame_buffer: vec![0; 256 * 240 * 4],
 
-            ppu_ctrl:   PpuCtrlFlags::from_bits_truncate(0b0000_0000),
-            ppu_status: PpuStatusFlags::from_bits_truncate(0b0000_0000),
+            ppu_ctrl:   PpuCtrlFlags::new(),
+            ppu_status: PpuStatusFlags::new(),
 
             ppu_mask:   0,
             oam_addr:   0,
@@ -170,9 +185,23 @@ impl PPU {
 
     pub fn write_registers(&mut self, addr: u16, data: u8) {
         match addr {
-            0 => {
+            0 => { // PPUCTRL
                 let before_nmi_status = self.ppu_ctrl.generate_vblank_nmi();
-                self.ppu_ctrl = PpuCtrlFlags::from_bits_truncate(data)
+                self.ppu_ctrl = PpuCtrlFlags::from_bits_truncate(data);
+
+                // Check for immediate NMI trigger
+                let after_nmi_status = self.ppu_ctrl.generate_vblank_nmi();
+                
+                // If NMI was just enabled AND the PPU is already in vblank, trigger an NMI
+                if !before_nmi_status && after_nmi_status && self.ppu_status.contains(PpuStatusFlags::VblankFlag) {
+                    // This `nmi_callback` needs to be defined to communicate with the CPU.
+                    // You could add a field to the PPU struct or pass a callback.
+                    // For simplicity, let's assume PPU can directly set the CPU's NMI flag.
+                    // This requires the PPU to hold a reference to the CPU or a shared flag.
+                    // A better approach is to make `tick` return a value.
+                    // Let's stick with the `tick` return value approach you already have.
+                    // So, this logic should be handled by the CPU after calling the write function.
+                }
             }
             1 => {
                 self.ppu_mask   = data
@@ -193,7 +222,7 @@ impl PPU {
                 self.ppu_addr.write_byte(data);
             }
             7 => {
-                self.ppu_data   = data
+                self.ppubus.write_vram(self.ppu_addr.value, data);
             }
             _ => panic!("um endereço invalido foi chamado: {}", addr)
         }
@@ -204,47 +233,59 @@ impl PPU {
     ///the nes ppu makes 340 cycles per scanline
     ///and 260 scanlines(one for each horizontal line of pixels)
     pub fn tick(&mut self, cycles: u8) -> bool {
-        self.cycle += cycles as u16;
+        for _ in 0..cycles {
+            if self.scanline < 240 && self.cycle < 256 {
+                let pixel_index = (self.scanline as usize * 256 + self.cycle as usize) * 4;
+                if pixel_index + 3 < self.frame_buffer.len() {
 
-        if self.scanline < 240 && self.cycle < 256 {
-            let pixel_index = (self.scanline as usize * 256 + self.cycle as usize) * 4; // RGBA
-            if pixel_index + 3 < self.frame_buffer.len() {
-                let color_val = if (self.cycle / 8 + self.scanline / 8) % 2 == 0 { 255 } else { 0 };
-                self.frame_buffer[pixel_index] = color_val;     // Red
-                self.frame_buffer[pixel_index + 1] = color_val; // Green
-                self.frame_buffer[pixel_index + 2] = color_val; // Blue
-                self.frame_buffer[pixel_index + 3] = 255;       // Alpha
-            }
-        }
-        
-        self.cycle += 1;
+                   // //CHESS BOARD LOGIC
+                   // let color_val = if (self.cycle / 8 + self.scanline / 8) % 2 == 0 { 255 } else { 0 };
+                   // self.frame_buffer[pixel_index] = color_val;     // Red
+                   // self.frame_buffer[pixel_index + 1] = color_val; // Green
+                   // self.frame_buffer[pixel_index + 2] = color_val; // Blue
+                   // self.frame_buffer[pixel_index + 3] = 255;       // Alpha
 
-        //starting Vblank (scanline 241)
-        if self.cycle > 340 {
-            self.cycle = 0;
-            self.scanline += 1;
-
-            if self.scanline == 241 {
-                self.ppu_status.insert(PpuStatusFlags::VblankFlag);
-                self.frame_complete = true;
-
-                if self.ppu_ctrl.contains(PpuCtrlFlags::VblankNMI) {
-                    return true
+                   
                 }
             }
-            
-            //end of frame (scanline 261) restarts to the next frame
-            if self.scanline > 261 {
-                self.scanline = 0;
-                self.ppu_status.remove(PpuStatusFlags::VblankFlag);
-                self.ppu_status.remove(PpuStatusFlags::Sprite0hit);
-                self.ppu_status.remove(PpuStatusFlags::SpriteOverflow);
 
+            self.cycle += 1;
+
+            if self.cycle > 340 {
+                self.cycle = 0;
+                self.scanline += 1;
+
+                if self.scanline == 241 { // Começa o Vblank
+                    self.ppu_status.insert(PpuStatusFlags::VblankFlag);
+                    self.frame_complete = true;
+
+                    if self.ppu_ctrl.contains(PpuCtrlFlags::VblankNMI) {
+                        return true
+                    }
+                }
+                
+                if self.scanline > 261 {
+                    self.scanline = 0;
+                    self.ppu_status.remove(PpuStatusFlags::VblankFlag);
+                    self.ppu_status.remove(PpuStatusFlags::Sprite0hit);
+                    self.ppu_status.remove(PpuStatusFlags::SpriteOverflow);
+                }
             }
         }
-
         false
-
+    }
+    //VPHB SINN
+    pub fn format_ppu_status(&self, status: u8) -> String {
+        let mut s = String::new();
+        s.push_str(if (status & 0b10000000) != 0 { "N" } else { "-" });
+        s.push_str(if (status & 0b01000000) != 0 { "N" } else { "-" });
+        s.push_str(if (status & 0b00100000) != 0 { "I" } else { "-" });
+        s.push_str(if (status & 0b00010000) != 0 { "S" } else { "-" });
+        s.push_str(if (status & 0b00001000) != 0 { "B" } else { "-" });
+        s.push_str(if (status & 0b00000100) != 0 { "H" } else { "-" });
+        s.push_str(if (status & 0b00000010) != 0 { "P" } else { "-" });
+        s.push_str(if (status & 0b00000001) != 0 { "V" } else { "-" });
+        s
     }
 }
 

@@ -111,7 +111,7 @@ impl BUS {
 }
 
 #[allow(dead_code)]
-pub fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
+pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
     let rom_data = std::fs::read(path).expect("Failed to extract ROM");
@@ -130,10 +130,13 @@ pub fn load_rom_from_file(path: &Path) -> Box<dyn Mapper>{
             //The CHR ROM starts after the PRG ROM
             let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].to_vec();
 
-            Box::new(InesMapper000 {
-                prg_rom: prg_rom_data,
-                chr_rom: chr_rom_data,
-            })
+            Rc::new(
+                RefCell::new(
+                    Box::new(InesMapper000 {
+                        prg_rom: prg_rom_data,
+                        chr_rom: chr_rom_data,
+            })))
+
         }
         1 => {
             panic!("Mapper 1 is not suported yet")
