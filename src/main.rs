@@ -5,9 +5,9 @@ mod ppu;
 use std::path::Path;
 
 use macroquad::prelude::*;
-use memory::dummy_mapper::TestMapper;
+//use memory::dummy_mapper::TestMapper;
 
-use crate::{cpu::cpu::CPU, memory::mappers::InesMapper000};
+use crate::{cpu::cpu::CPU};
 
 #[macro_use]
 extern crate lazy_static;
@@ -52,7 +52,7 @@ async fn main() {
 
 }
 async fn debbuger_info(cpu: &mut CPU) {
-    let mut show_debug_info = true;
+    let mut show_debug_info = false;
 
     let mut image = Image::gen_image_color(256, 240, Color { r: 0.0 , g: 0.0, b: 0.0, a: 1.0 });
     let ppu_texture = Texture2D::from_image(&image);
@@ -60,21 +60,22 @@ async fn debbuger_info(cpu: &mut CPU) {
     ppu_texture.set_filter(FilterMode::Nearest);
     
     loop {
-        clear_background(BLUE);
+        clear_background(BLACK);
 
         //TODO lembrar de colocar isso aqui de volta depois
         //while !cpu.bus.ppu.frame_complete {
         //    cpu.step(|_| {});
         //}
 
-        cpu.step(|_| {});
+        for _ in 0..100 {
+            cpu.step(|_| {});
+        }
+
+        //cpu.step(|_| {});
         
         if cpu.bus.ppu.frame_complete {
-            // Copie os dados do frame_buffer da PPU para a imagem do Macroquad
-            // O `frame_buffer` da PPU é RGBA, então podemos copiá-lo diretamente
-            // para os bytes da imagem.
+            //at the end of each step, takes the frame buffer and updates the ppu texture with it, therefore rendering a new frame
             image.bytes.copy_from_slice(&cpu.bus.ppu.frame_buffer);
-            // Atualize a textura com os novos dados da imagem
             ppu_texture.update(&image);
         }
 
@@ -107,6 +108,8 @@ async fn debbuger_info(cpu: &mut CPU) {
             draw_text(&format!("STATUS: {}", CPU::format_cpu_status(cpu.status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("PC: {:#06x}", cpu.program_counter), pos_x, pos_y, font_size, WHITE);
+            pos_y += line_height;
+            draw_text(&format!("CYCLES: {:?}", cpu.cycles), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("A: {:#04x} | X: {:#04x} | Y: {:#04x}", cpu.register_a, cpu.register_x, cpu.register_y), pos_x, pos_y, font_size, WHITE);
             

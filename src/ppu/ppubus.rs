@@ -24,6 +24,17 @@ impl PPUBUS {
         }
     }
     pub fn write_vram(&mut self, addr: u16, data: u8) {
-        self.vram[addr as usize] = data
+        let mut mapped_addr = addr;
+
+        if mapped_addr >= 0x2000 && mapped_addr < 0x3000 {
+            mapped_addr = mapped_addr - 0x2000;
+            mapped_addr = mapped_addr % 0x0800;
+        }
+        
+        if mapped_addr >= 0x3F00 && mapped_addr < 0x4000 {
+            mapped_addr = mapped_addr % 0x20;
+        }
+        
+        self.vram[mapped_addr as usize] = data;
     }
 }

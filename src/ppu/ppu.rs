@@ -274,6 +274,7 @@ impl PPU {
         }
         false
     }
+    
     //VPHB SINN
     pub fn format_ppu_status(&self, status: u8) -> String {
         let mut s = String::new();
@@ -288,7 +289,6 @@ impl PPU {
         s
     }
 }
-
 
 //2 registers are responsible for accessing PPU memory map:
 //

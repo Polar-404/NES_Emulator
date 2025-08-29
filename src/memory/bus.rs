@@ -21,8 +21,8 @@ pub struct BUS {
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
     mapper: Rc<RefCell<Box<dyn Mapper>>>,
     pub ppu: PPU,
-    cycles: u64,
 }
+
 impl BUS {
     
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
@@ -32,7 +32,6 @@ impl BUS {
             apu_and_io_functionality: [0; 0x08], 
             mapper: Rc::clone(&mapper),
             ppu: PPU::new(mapper),
-            cycles: 0,
         }
     }
     
@@ -100,7 +99,6 @@ impl BUS {
     }
 
     pub fn tick(&mut self, cycles: u8) -> bool {
-        self.cycles += cycles as u64;
         self.ppu.tick(cycles * 3)
     }
     

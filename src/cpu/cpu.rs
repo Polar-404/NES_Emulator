@@ -1,6 +1,10 @@
 // The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
 // Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 
+//though by now i've implemented the ppu NMI and other shenanigans here, maybe it's not a simple 6502 anymore, I can go back look the old git commits...
+//or maybe in the future I can look for another way around to implement the ppu here
+
+
 use macroquad::prelude::warn;
 
 use crate::cpu::opcodes;
@@ -61,6 +65,7 @@ pub struct CPU {
     pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
+    pub cycles: u64,
     pub bus: BUS,
     
     nmi: bool
@@ -94,7 +99,8 @@ impl CPU {
             program_counter: 0,
             stack_pointer: STACK_RESET,
             bus: BUS::new(mapper),
-            nmi: false
+            nmi: false,
+            cycles: 0,
         }
     }
 
@@ -491,9 +497,9 @@ impl CPU {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
     }
     fn stack_pop(&mut self) -> u8 {
-        if self.stack_pointer == 0xfd {
-            panic!("tried to pop a empty stack")
-        }
+        //if self.stack_pointer == 0xfd {
+        //    panic!("tried to pop a empty stack")
+        //}
         self.increment_stack();
         //println!("addr: {}", STACK + self.stack_pointer as u16);
         let data = self.mem_read( STACK + self.stack_pointer as u16) ;
@@ -657,12 +663,9 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
 
-        let sum = (self.register_a as u16 - val as u16)  
-        - (if self.status.contains(CpuFlags::CARRY) {
-            1
-        } else {
-            0
-        });
+        let sub_carry = if self.status.contains(CpuFlags::CARRY) { 1 } else { 0 };
+
+        let sum = ((self.register_a as u16).wrapping_sub(sub_carry)).wrapping_sub(val as u16);
 
         if sum > 0xff { //seta a carry flag
             self.status.insert(CpuFlags::CARRY); 
@@ -756,6 +759,7 @@ impl CPU {
 
         let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido", code));
 
+        self.cycles += opcode.cycles as u64;
         if self.bus.tick(opcode.cycles) {
             self.nmi = true;
         }
