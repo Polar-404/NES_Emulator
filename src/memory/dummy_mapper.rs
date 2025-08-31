@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::memory::mappers::Mapper;
+use crate::memory::{mappers::Mapper, bus::Mirroring};
 
 pub struct TestMapper {
     ram: [u8; 0x0800],
@@ -11,7 +11,7 @@ pub struct TestMapper {
 }
 
 impl TestMapper {
-    pub fn new(program: Vec<u8>) -> Rc<RefCell<Box<dyn Mapper>>>{
+    pub fn new(program: Vec<u8>) -> Rc<RefCell<Box<dyn Mapper>>> {
         let ram = [0; 0x0800];
         
         let mut prg_rom_vec = vec![0; 0x8000];
@@ -61,5 +61,10 @@ impl Mapper for TestMapper {
     }
     fn write_chr(&mut self, addr: u16, val: u8) {
         panic!("tried to write at the chr_rom on the test mapper")
+    }
+    
+    ///Unused
+    fn mirroring(&self) -> Mirroring {
+        Mirroring::Horizontal
     }
 }

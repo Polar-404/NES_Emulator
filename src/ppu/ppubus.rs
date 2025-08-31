@@ -1,10 +1,7 @@
+use crate::memory::bus::Mirroring;
 use crate::memory::mappers::Mapper;
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
-
-struct Vram {
-    vram_state: u8
-}
 
 pub struct PPUBUS {
     //32 byte pallete [16 for backgroudn 16 for foreground]
@@ -23,18 +20,53 @@ impl PPUBUS {
             mapper,
         }
     }
-    pub fn write_vram(&mut self, addr: u16, data: u8) {
-        let mut mapped_addr = addr;
 
-        if mapped_addr >= 0x2000 && mapped_addr < 0x3000 {
-            mapped_addr = mapped_addr - 0x2000;
-            mapped_addr = mapped_addr % 0x0800;
+    pub fn write_ppubus(&mut self, addr: u16, data: u8) {
+        match addr {
+            //pattern tables(storages the tiles(8x8 pixels blocks))
+            //THE MAJORITY OF THE CHR-ROM(PATTERN TABLES) IS READ-ONLY, 
+            //BUT SOME OF THEM CAN BE WRITTEN, SO IT'S A GOOD PRATICE TO ALLOW IT TO BE POSSIBLE
+            0..=0x1FFF => {
+                self.mapper.borrow_mut().write(addr, data);
+            }
+            //VRAM (or nametable)
+            0x2000..=0x3EFF  => {
+                self.write_vram(addr, data);
+            }
+            0x3F00..=0x3FFF => {
+                //mirroring the last addr of the palletes
+                let addr = if(addr & 0x1F) >= 10 && (addr & 0x1F) % 4 == 0 {0x00} else {addr & 0x1F};
+                self.palette_ram[addr as usize] = data;
+            }
+
+
+            _ => {
+                todo!();
+            }
+        }
+    }
+
+    pub fn write_vram(&mut self, addr: u16, data: u8) {
+        let mut addr = (addr - 0x2000) & 0x0FFF;
+
+        match self.mapper.borrow().mirroring() {
+            Mirroring::Vertical => {
+                addr &= 0x07FF;
+            }
+            Mirroring::Horizontal => {
+                dbg!(addr);
+                addr = (addr & 0x03FF) + ((addr & 0x0800) >> 1);
+                
+            }
+            //TODO didnt implement OneScreen mirroring yet
+            #[allow(unreachable_patterns)]
+            _ => {
+                //with OneScreen mirroring all the nametables point to the same 1kb space 
+                addr &= 0x03FF;
+            }
+
         }
         
-        if mapped_addr >= 0x3F00 && mapped_addr < 0x4000 {
-            mapped_addr = mapped_addr % 0x20;
-        }
-        
-        self.vram[mapped_addr as usize] = data;
+        self.vram[addr as usize] = data;
     }
 }

@@ -108,6 +108,12 @@ impl BUS {
     //}
 }
 
+#[derive(Clone, Copy)]
+pub enum Mirroring {
+    Vertical,
+    Horizontal,
+}
+
 #[allow(dead_code)]
 pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
 
@@ -127,12 +133,27 @@ pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
             
             //The CHR ROM starts after the PRG ROM
             let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].to_vec();
+            
+            //mirroring type
+            let mirroring_byte = rom_data[6] & 0b0000_0001;
+            let mirroring_type: Mirroring;
+
+            if (mirroring_byte >> 3) & 0b0000_0001 == 1 {
+                todo!("FOUR SCREEN BIT")
+            } else {
+                if mirroring_byte == 0 {
+                    mirroring_type = Mirroring::Horizontal
+                } else {
+                    mirroring_type = Mirroring::Vertical
+                }
+            }
 
             Rc::new(
                 RefCell::new(
                     Box::new(InesMapper000 {
                         prg_rom: prg_rom_data,
                         chr_rom: chr_rom_data,
+                        mirroring: mirroring_type
             })))
 
         }

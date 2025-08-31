@@ -116,7 +116,10 @@ pub struct PPU {
     pub oam_addr:   u8,
     pub oam_data:   u8,
     pub ppu_scrl:   DoubleWriteRegister,
+
+    ///VRAM ADDR
     pub ppu_addr:   DoubleWriteRegister,
+    
     pub ppu_data:   u8,
 
     pub oam_dma:    u8, //[0x4014] adress
@@ -132,6 +135,7 @@ impl PPU {
             frame_buffer: vec![0; 256 * 240 * 4],
 
             ppu_ctrl:   PpuCtrlFlags::new(),
+
             ppu_status: PpuStatusFlags::new(),
 
             ppu_mask:   0,
@@ -222,7 +226,7 @@ impl PPU {
                 self.ppu_addr.write_byte(data);
             }
             7 => {
-                self.ppubus.write_vram(self.ppu_addr.value, data);
+                self.ppubus.write_ppubus(self.ppu_addr.value, data);
             }
             _ => panic!("um endereço invalido foi chamado: {}", addr)
         }
@@ -238,12 +242,12 @@ impl PPU {
                 let pixel_index = (self.scanline as usize * 256 + self.cycle as usize) * 4;
                 if pixel_index + 3 < self.frame_buffer.len() {
 
-                   // //CHESS BOARD LOGIC
-                   // let color_val = if (self.cycle / 8 + self.scanline / 8) % 2 == 0 { 255 } else { 0 };
-                   // self.frame_buffer[pixel_index] = color_val;     // Red
-                   // self.frame_buffer[pixel_index + 1] = color_val; // Green
-                   // self.frame_buffer[pixel_index + 2] = color_val; // Blue
-                   // self.frame_buffer[pixel_index + 3] = 255;       // Alpha
+                   //CHESS BOARD LOGIC
+                   let color_val = if (self.cycle / 8 + self.scanline / 8) % 2 == 0 { 255 } else { 0 };
+                   self.frame_buffer[pixel_index] = color_val;     // Red
+                   self.frame_buffer[pixel_index + 1] = color_val; // Green
+                   self.frame_buffer[pixel_index + 2] = color_val; // Blue
+                   self.frame_buffer[pixel_index + 3] = 255;       // Alpha
 
                    
                 }

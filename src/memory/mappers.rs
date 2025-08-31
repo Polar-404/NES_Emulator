@@ -20,6 +20,7 @@
 
 #[allow(dead_code)] //TODO temporario só pra ele parar de encher o saco
 
+use crate::memory::bus::Mirroring;
 
 pub trait Mapper {
     fn read(&self, addr: u16) -> u8;
@@ -29,13 +30,16 @@ pub trait Mapper {
     fn read_chr(&self, addr: u16) -> u8;
     
     fn write_chr(&mut self, addr: u16, val: u8);
+
+    fn mirroring(&self) -> Mirroring;
 }
 
 //---------------- MAPPERS LIST ----------------
 
 pub struct InesMapper000 {
     pub prg_rom: Vec<u8>,
-    pub chr_rom: Vec<u8>
+    pub chr_rom: Vec<u8>,
+    pub mirroring: Mirroring
 }
 
 impl Mapper for InesMapper000 {
@@ -66,4 +70,8 @@ impl Mapper for InesMapper000 {
     fn write_chr(&mut self, _addr: u16, _val: u8) {
         panic!("Tried to write to CHR ROM on Mapper 000!");
     }
+    fn mirroring(&self) -> Mirroring {
+        self.mirroring
+    }
+
 }
