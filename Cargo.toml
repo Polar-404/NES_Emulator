@@ -1,7 +1,11 @@
 [package]
-name = "NES_Emulador"
+name = "nes_emulator"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[[bin]]
+name = "emulator_loop"
+path = "src/emulator_loop.rs"
 
 [dependencies]
 lazy_static = "1.4.0"
