@@ -33,7 +33,19 @@ fn window_conf() -> Conf {
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     let game_file = &args[1];
-    
+
+    //unused loop
+        // let mut program: Vec<u8> = vec![0; 0x1FFF];
+        // program[0x0300] = 0xA9; // LDA #$0A
+        // program[0x0301] = 0x0A;
+        // program[0x0302] = 0x85; // STA $00
+        // program[0x0303] = 0x00;
+        // program[0x0304] = 0x4C; // JMP $C000
+        // program[0x0305] = 0xff;
+        // program[0x0306] = 0x00;
+        // program[0x03FC] = 0x00; // Vetor de reset para 0xC000
+        // program[0x03FD] = 0xC0;
+        
     let mapper = memory::bus::load_rom_from_file(Path::new(game_file));
     
     let mut cpu = CPU::new(mapper);
@@ -51,13 +63,13 @@ async fn main() {
         clear_background(BLACK);
 
         //TODO lembrar de colocar isso aqui de volta depois
-        //while !cpu.bus.ppu.frame_complete {
-        //    cpu.step(|_| {});
-        //}
-
-        for _ in 0..=100 {
+        while !cpu.bus.ppu.frame_complete {
             cpu.step(|_| {});
         }
+
+        //for _ in 0..=10 {
+        //    cpu.step(|_| {});
+        //}
 
         //cpu.step(|_| {});
         
