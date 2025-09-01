@@ -30,9 +30,12 @@
 //  |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
 //  +--------- Vblank NMI enable (0: off, 1: on)
 
-use crate::{memory::mappers::Mapper, ppu::ppubus::PPUBUS};
+use crate::memory::mappers::Mapper;
+
 use std::rc::Rc;
 use std::cell::RefCell;
+
+use super::{ppuaddr::PPUAddress, ppubus::PPUBUS};
 
 bitflags! {
     #[derive(Debug)]
@@ -103,6 +106,34 @@ impl DoubleWriteRegister {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct NESColor {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+
+//NES PALETTE:
+const NTSC_PALETTE: [NESColor; 64] = [
+    NESColor { r: 84, g: 84, b: 84 },     NESColor { r: 0, g: 30, b: 116 },      NESColor { r: 8, g: 16, b: 144 },       NESColor { r: 48, g: 0, b: 136 },
+    NESColor { r: 68, g: 0, b: 100 },     NESColor { r: 88, g: 0, b: 40 },       NESColor { r: 84, g: 4, b: 0 },         NESColor { r: 68, g: 24, b: 0 },
+    NESColor { r: 32, g: 42, b: 0 },      NESColor { r: 0, g: 58, b: 0 },        NESColor { r: 0, g: 64, b: 0 },         NESColor { r: 0, g: 60, b: 0 },
+    NESColor { r: 0, g: 50, b: 60 },      NESColor { r: 0, g: 0, b: 0 },         NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
+    NESColor { r: 152, g: 152, b: 152 },  NESColor { r: 0, g: 80, b: 188 },      NESColor { r: 56, g: 72, b: 240 },      NESColor { r: 104, g: 64, b: 240 },
+    NESColor { r: 140, g: 48, b: 224 },   NESColor { r: 160, g: 32, b: 176 },    NESColor { r: 160, g: 32, b: 100 },     NESColor { r: 144, g: 48, b: 32 },
+    NESColor { r: 104, g: 64, b: 32 },    NESColor { r: 60, g: 82, b: 0 },       NESColor { r: 0, g: 96, b: 0 },         NESColor { r: 20, g: 100, b: 0 },
+    NESColor { r: 48, g: 96, b: 0 },      NESColor { r: 0, g: 84, b: 96 },       NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
+    NESColor { r: 240, g: 240, b: 240 },  NESColor { r: 124, g: 136, b: 252 },   NESColor { r: 188, g: 188, b: 252 },    NESColor { r: 216, g: 176, b: 252 },
+    NESColor { r: 228, g: 160, b: 236 },  NESColor { r: 236, g: 144, b: 228 },   NESColor { r: 236, g: 144, b: 176 },    NESColor { r: 220, g: 160, b: 112 },
+    NESColor { r: 196, g: 176, b: 96 },   NESColor { r: 148, g: 192, b: 80 },    NESColor { r: 120, g: 204, b: 80 },     NESColor { r: 88, g: 216, b: 120 },
+    NESColor { r: 116, g: 208, b: 196 },  NESColor { r: 160, g: 160, b: 160 },   NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
+    NESColor { r: 252, g: 252, b: 252 },  NESColor { r: 188, g: 216, b: 252 },   NESColor { r: 224, g: 224, b: 252 },    NESColor { r: 236, g: 236, b: 252 },
+    NESColor { r: 248, g: 216, b: 252 },  NESColor { r: 252, g: 204, b: 240 },   NESColor { r: 252, g: 196, b: 224 },    NESColor { r: 244, g: 204, b: 168 },
+    NESColor { r: 228, g: 212, b: 148 },  NESColor { r: 204, g: 224, b: 132 },   NESColor { r: 184, g: 232, b: 144 },    NESColor { r: 152, g: 240, b: 180 },
+    NESColor { r: 168, g: 236, b: 224 },  NESColor { r: 200, g: 200, b: 200 },   NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
+];
+
 
 pub struct PPU {
     pub cycle: u16,
@@ -124,6 +155,20 @@ pub struct PPU {
 
     pub oam_dma:    u8, //[0x4014] adress
     pub ppubus:     PPUBUS,
+
+
+    pub internal_v: PPUAddress, // vram address during the rendering
+    pub internal_t: PPUAddress, // temporary vram address (used by PPUSCROLL and PPUADDR)
+
+    //shifters
+    pub bg_nametable_byte:          u8,
+    pub bg_attribute_byte:          u8,
+    pub bg_low_byte:                u8,
+    pub bg_high_byte:               u8,
+    pub bg_shifter_pattern_low:     u16,
+    pub bg_shifter_pattern_high:    u16,
+    pub bg_shifter_attribute_low:   u16,
+    pub bg_shifter_attribute_high:  u16,
 }
 
 impl PPU {
@@ -146,7 +191,19 @@ impl PPU {
             ppu_data:   0,
             oam_dma:    0,
 
-            ppubus:     PPUBUS::new(mapper)
+            ppubus:     PPUBUS::new(mapper),
+
+            internal_v: PPUAddress::new(),
+            internal_t: PPUAddress::new(),
+
+            bg_nametable_byte:          0,
+            bg_attribute_byte:          0,
+            bg_low_byte:                0,
+            bg_high_byte:               0,
+            bg_shifter_pattern_low:     0,
+            bg_shifter_pattern_high:    0,
+            bg_shifter_attribute_low:   0,
+            bg_shifter_attribute_high:  0,
         }
     }
 

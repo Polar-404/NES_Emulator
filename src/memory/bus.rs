@@ -114,6 +114,7 @@ pub enum Mirroring {
     Horizontal,
 }
 
+//TODO it should possibly return a result and have better error handling
 #[allow(dead_code)]
 pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
 
