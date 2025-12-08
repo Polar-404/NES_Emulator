@@ -159,6 +159,19 @@ impl CPU {
 
         }
     }
+
+    pub fn trigger_cpu_nmi(&mut self) {
+        //sends the nmi interuption to the cpu
+        self.stack_push_u16(self.program_counter);
+        self.status.insert(CpuFlags::BREAK | CpuFlags::BREAK2);
+        self.php(); //push processor status
+
+        self.status.insert(CpuFlags::INTERRUPT_DISABLE);
+
+        self.program_counter = self.bus.mem_read_u16(0xFFFA);
+        self.nmi = false; // Limpa a flag NMI
+    }
+
     // comandos de controle de memoria
     fn mem_read(&mut self, addr: u16) -> u8 {
         let val = self.bus.mem_read(addr);
@@ -166,7 +179,9 @@ impl CPU {
     }
 
     fn mem_write(&mut self, addr: u16, data: u8) {
-        self.bus.mem_write(addr, data);
+        if self.bus.mem_write(addr, data) {
+            self.trigger_cpu_nmi();
+        }
     }
 
     /////writes the program counter to
@@ -740,15 +755,7 @@ impl CPU {
         callback(self);
 
         if self.nmi {
-            //sends the nmi interuption to the cpu
-            self.stack_push_u16(self.program_counter);
-            self.status.insert(CpuFlags::BREAK | CpuFlags::BREAK2);
-            self.php(); //push processor status
-
-            self.status.insert(CpuFlags::INTERRUPT_DISABLE);
-
-            self.program_counter = self.bus.mem_read_u16(0xFFFA);
-            self.nmi = false; // Limpa a flag NMI
+            self.trigger_cpu_nmi();
         }
 
         let code = self.mem_read(self.program_counter);
@@ -764,7 +771,7 @@ impl CPU {
             self.nmi = true;
         }
 
-        match code{
+        match code {
             //LDA
             0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
                 //cada uma das instruções representa o comando LDA mas como flags diferentes
@@ -1278,13 +1285,21 @@ mod test {
         assert_eq!(cpu.mem_read((STACK + cpu.stack_pointer as u16).wrapping_add(1)), 0xe0)
     }
     #[test]
-    #[should_panic(expected = "tried to pop a empty stack")]
-    fn test_pla_panic() {
-        let mapper = TestMapper::new(vec![0x68]);
+    //it doenst purposefully panic anymore
+    fn test_pla_at_empty_stack() {
+        let mapper = TestMapper::new(vec![0x68, 0x00]); 
         let mut cpu = CPU::new(mapper);
 
+        cpu.stack_pointer = 0xFF;
+
+        cpu.mem_write(0x0100, 0xAB);
+
         cpu.run_test();
+
+        assert_eq!(cpu.register_a, 0xAB);
+        assert_eq!(cpu.stack_pointer, 0x00);
     }
+
     #[test]
     fn test_pla_correctly() {
         let mapper = TestMapper::new(vec![0xa9, 0xe0, 0x48, 0xa9, 0xd0, 0x48, 0xa9, 0x10, 0x68]);
