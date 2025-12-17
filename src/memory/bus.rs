@@ -60,30 +60,41 @@ impl BUS {
         }
     }
 
-    pub fn mem_write(&mut self, addr: u16, val: u8) {
+    ///Returns true if the cpu should trigger an NMI
+    /// 
+    ///It should trigger an NMI if the ppu writes at ppuctrl AND NMI was just enabled AND the PPU is already in vblank
+    pub fn mem_write(&mut self, addr: u16, val: u8) -> bool {
         match addr {
             0x0000..=0x1FFF => {
                 let addr = addr & 0x07FF;
-                self.cpu_memory[addr as usize] = val
+                self.cpu_memory[addr as usize] = val;
+                false
             }
             0x2000..=0x3FFF => {
                 let addr = addr & 0x0007;
-                self.ppu.write_registers(addr, val);
+                if self.ppu.write_registers(addr, val) {
+                    return true
+                }
+                false
             }
             0x4000..=0x4017 => {
                 let addr = addr - 0x4000;
-                self.nes_apu_and_io_registers[addr as usize] = val
+                self.nes_apu_and_io_registers[addr as usize] = val;
+                false
             }
             0x4018..=0x401F => {
                 let addr = addr - 0x4018;
-                self.apu_and_io_functionality[addr as usize] = val
+                self.apu_and_io_functionality[addr as usize] = val;
+                false
             }
             0x4020..=0xFFFF => {
                 //passing it's real address(without subtraction) to the mapper to take care of it
-                self.mapper.borrow_mut().write(addr, val)
+                self.mapper.borrow_mut().write(addr, val);
+                false
             }
         }
     }
+
     #[allow(dead_code)]
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
@@ -99,7 +110,7 @@ impl BUS {
     }
 
     pub fn tick(&mut self, cycles: u8) -> bool {
-        self.ppu.tick(cycles * 3)
+        self.ppu.tick(cycles as u16 * 3)
     }
     
     //pub fn load(&mut self, program: Vec<u8>) {
@@ -119,8 +130,8 @@ pub enum Mirroring {
 pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
-    let rom_data = std::fs::read(path).expect("Failed to extract ROM");
-    let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
+        let rom_data = std::fs::read(path).expect("Failed to extract ROM");
+        let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
 
     match mapper_match {
         0 => {

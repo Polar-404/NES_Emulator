@@ -9,7 +9,7 @@ pub struct PPUBUS {
     //stores object atributes such as position, orientatiom pallete, etc...
     oam: [u8; 0xff], //256 bytes(up to 64 sprites
     vram: [u8; 0x0800], 
-    mapper: Rc<RefCell<Box<dyn Mapper>>>// 2KB VRAM
+    pub mapper: Rc<RefCell<Box<dyn Mapper>>>// 2KB VRAM
 }
 impl PPUBUS {
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> PPUBUS {

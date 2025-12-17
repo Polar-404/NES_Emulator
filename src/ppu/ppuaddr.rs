@@ -1,4 +1,4 @@
-use crate::{cpu::cpu::CpuFlags, ppu::ppu::PpuCtrlFlags};
+use crate::{ppu::ppu::PpuCtrlFlags};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PPUAddress {
@@ -34,10 +34,12 @@ impl PPUAddress {
     }
 
     #[inline]
+    #[allow(unused)] //TODO
     pub fn set_nametable(&mut self, val: u8) {
         self.addr = (self.addr & 0b111_00_11111_11111) | ((val as u16) << 10);
     }
     #[inline]
+    #[allow(unused)] //TODO
     pub fn get_namtable(&self) -> u8 {
         ((self.addr & 0b000_11_00000_00000) >> 10) as u8
     }
@@ -51,15 +53,15 @@ impl PPUAddress {
         ((self.addr & 0b111_00_00000_00000) >> 12) as u8
     }
 
-    pub fn incrmeent_course_x(&mut self) {
-        let mut course_x = self.get_coarse_x();
-        if course_x == 31 {
-            course_x = 0;
+    pub fn incrmeent_coarse_x(&mut self) {
+        let mut coarse_x = self.get_coarse_x();
+        if coarse_x == 31 {
+            coarse_x = 0;
             self.addr ^= 0x0400;
         } else {
-            course_x += 1;
+            coarse_x += 1;
         }
-        self.set_coarse_x(course_x);
+        self.set_coarse_x(coarse_x);
     }
     pub fn incrment_fine_y(&mut self) {
         let fine_y = self.get_coarse_y();
@@ -98,5 +100,5 @@ impl PPUAddress {
         addr
     }
 
-    
+
 }
