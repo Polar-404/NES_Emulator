@@ -50,104 +50,15 @@ use crate::{memory::mappers::Mapper};
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use super::{ppuaddr::PPUAddress, ppubus::PPUBUS};
-
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    pub struct PpuCtrlFlags: u8 {
-        const NameTable1              = 0b00000001; //Base nametable address (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
-        const NameTable2              = 0b00000010; //Base nametable address (0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
-        const IncrementVRAM           = 0b00000100; //VRAM address increment per CPU read/write of PPUDATA (0: add 1, going across; 1: add 32, going down)
-        const SpritePattern           = 0b00001000; //Sprite pattern table address for 8x8 sprites (0: $0000; 1: $1000; ignored in 8x16 mode)
-        const BackGroundPattern       = 0b00010000; //Background pattern table address (0: $0000; 1: $1000) Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
-        const SpriteSize              = 0b00100000; //Sprite size (0: 8x8 pixels; 1: 8x16 pixels)
-        const PPUMasterSlaveSelect    = 0b01000000; //PPU master/slave select
-        const VblankNMI               = 0b10000000; //Vblank NMI enable (0: off, 1: on)
-    }
-}
-impl PpuCtrlFlags {
-    pub fn new() -> Self {
-        PpuCtrlFlags::from_bits_truncate(0b0000_0000)
-    }
-    pub fn generate_vblank_nmi(&self) -> bool {
-        return self.contains(PpuCtrlFlags::VblankNMI);
-    }
-}
-
-bitflags! {
-    #[derive(Debug)]
-    pub struct PpuStatusFlags: u8 {
-        const X1                = 0b00000001; //(PPU open bus or 2C05 PPU identifier)
-        const X2                = 0b00000010; //(PPU open bus or 2C05 PPU identifier)
-        const X3                = 0b00000100; //(PPU open bus or 2C05 PPU identifier)
-        const X4                = 0b00001000; //(PPU open bus or 2C05 PPU identifier)
-        const X5                = 0b00010000; //(PPU open bus or 2C05 PPU identifier)
-        const SpriteOverflow    = 0b00100000; //Sprite overflow flag
-        const Sprite0hit        = 0b01000000; //Sprite 0 hit flag
-        const VblankFlag        = 0b10000000; //Vblank flag, cleared on read. Unreliable;
-    }
-}
-impl PpuStatusFlags {
-    pub fn new() -> Self {
-        PpuStatusFlags::from_bits_truncate(0b0000_0000)
-    }
-}
-
-pub struct DoubleWriteRegister {
-    pub value: u16,
-    pub is_first_write: bool,
-}
-impl DoubleWriteRegister {
-    pub fn new() -> Self {
-        DoubleWriteRegister {
-            value: 0,
-            is_first_write: true,
-        }
-    }
+use super::{
+    ppuaddr::PPUAddress,
+    ppubus::PPUBUS,
+    palettes::NTSC_PALETTE,
     
-    // Método para a PPU escrever nele
-    pub fn write_byte(&mut self, data: u8) {
-        if self.is_first_write {
-            self.value = ((data as u16) << 8) | (self.value & 0x00FF);
-        } else {
-            self.value = (self.value & 0xFF00) | (data as u16);
-        }
-        self.is_first_write = !self.is_first_write;
-    }
-    
-    // Método para resetar o estado de escrita dupla (chamado pela leitura de $2002)
-    pub fn reset_latch(&mut self) {
-        self.is_first_write = true;
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub struct NESColor {
-    r: u8,
-    g: u8,
-    b: u8,
-}
-
-
-//NES PALETTE:
-const NTSC_PALETTE: [NESColor; 64] = [
-    NESColor { r: 84, g: 84, b: 84 },     NESColor { r: 0, g: 30, b: 116 },      NESColor { r: 8, g: 16, b: 144 },       NESColor { r: 48, g: 0, b: 136 },
-    NESColor { r: 68, g: 0, b: 100 },     NESColor { r: 88, g: 0, b: 40 },       NESColor { r: 84, g: 4, b: 0 },         NESColor { r: 68, g: 24, b: 0 },
-    NESColor { r: 32, g: 42, b: 0 },      NESColor { r: 0, g: 58, b: 0 },        NESColor { r: 0, g: 64, b: 0 },         NESColor { r: 0, g: 60, b: 0 },
-    NESColor { r: 0, g: 50, b: 60 },      NESColor { r: 0, g: 0, b: 0 },         NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
-    NESColor { r: 152, g: 152, b: 152 },  NESColor { r: 0, g: 80, b: 188 },      NESColor { r: 56, g: 72, b: 240 },      NESColor { r: 104, g: 64, b: 240 },
-    NESColor { r: 140, g: 48, b: 224 },   NESColor { r: 160, g: 32, b: 176 },    NESColor { r: 160, g: 32, b: 100 },     NESColor { r: 144, g: 48, b: 32 },
-    NESColor { r: 104, g: 64, b: 32 },    NESColor { r: 60, g: 82, b: 0 },       NESColor { r: 0, g: 96, b: 0 },         NESColor { r: 20, g: 100, b: 0 },
-    NESColor { r: 48, g: 96, b: 0 },      NESColor { r: 0, g: 84, b: 96 },       NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
-    NESColor { r: 240, g: 240, b: 240 },  NESColor { r: 124, g: 136, b: 252 },   NESColor { r: 188, g: 188, b: 252 },    NESColor { r: 216, g: 176, b: 252 },
-    NESColor { r: 228, g: 160, b: 236 },  NESColor { r: 236, g: 144, b: 228 },   NESColor { r: 236, g: 144, b: 176 },    NESColor { r: 220, g: 160, b: 112 },
-    NESColor { r: 196, g: 176, b: 96 },   NESColor { r: 148, g: 192, b: 80 },    NESColor { r: 120, g: 204, b: 80 },     NESColor { r: 88, g: 216, b: 120 },
-    NESColor { r: 116, g: 208, b: 196 },  NESColor { r: 160, g: 160, b: 160 },   NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
-    NESColor { r: 252, g: 252, b: 252 },  NESColor { r: 188, g: 216, b: 252 },   NESColor { r: 224, g: 224, b: 252 },    NESColor { r: 236, g: 236, b: 252 },
-    NESColor { r: 248, g: 216, b: 252 },  NESColor { r: 252, g: 204, b: 240 },   NESColor { r: 252, g: 196, b: 224 },    NESColor { r: 244, g: 204, b: 168 },
-    NESColor { r: 228, g: 212, b: 148 },  NESColor { r: 204, g: 224, b: 132 },   NESColor { r: 184, g: 232, b: 144 },    NESColor { r: 152, g: 240, b: 180 },
-    NESColor { r: 168, g: 236, b: 224 },  NESColor { r: 200, g: 200, b: 200 },   NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
-];
+    registers::DoubleWriteRegister,
+    registers::PpuCtrlFlags,
+    registers::PpuStatusFlags
+};
 
 pub struct PPU {
     pub cycle: u16,

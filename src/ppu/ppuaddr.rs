@@ -1,4 +1,4 @@
-use crate::{ppu::ppu::PpuCtrlFlags};
+use super::registers::PpuCtrlFlags;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PPUAddress {
