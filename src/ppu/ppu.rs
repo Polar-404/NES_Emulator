@@ -30,6 +30,21 @@
 //  |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
 //  +--------- Vblank NMI enable (0: off, 1: on)
 
+// ------------------- PPU CNTRL FLAGS ------------------- 
+
+// 7  bit  0
+// ---- ----
+// BGRs bMmG
+// |||| ||||
+// |||| |||+- Greyscale (0: normal color, 1: greyscale)
+// |||| ||+-- 1: Show background in leftmost 8 pixels of screen, 0: Hide
+// |||| |+--- 1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+// |||| +---- 1: Enable background rendering
+// |||+------ 1: Enable sprite rendering
+// ||+------- Emphasize red (green on PAL/Dendy)
+// |+-------- Emphasize green (red on PAL/Dendy)
+// +--------- Emphasize blue
+
 use crate::{memory::mappers::Mapper};
 
 use std::rc::Rc;
@@ -151,6 +166,7 @@ pub struct PPU {
     pub ppu_addr:   DoubleWriteRegister,
     
     pub ppu_data:   u8,
+    pub ppu_data_buffer: u8,
 
     pub oam:    [u8; 0xff], //[0x4014] adress
     pub ppubus:     PPUBUS,
@@ -158,6 +174,8 @@ pub struct PPU {
 
     pub internal_v: PPUAddress, // vram address during the rendering
     pub internal_t: PPUAddress, // temporary vram address (used by PPUSCROLL and PPUADDR)
+
+    pub fine_x: u8,
 
     //shifters
     pub bg_nametable_byte:          u8,
@@ -171,7 +189,7 @@ pub struct PPU {
 
     sprites_in_scanline: u8,
     sprite_0_in_scanline: bool,
-    secondary_oam: [u8; 32],2QA
+    secondary_oam: [u8; 32],
 }
 
 impl PPU {
@@ -192,12 +210,15 @@ impl PPU {
             ppu_scrl:   DoubleWriteRegister::new(),
             ppu_addr:   DoubleWriteRegister::new(),
             ppu_data:   0,
+            ppu_data_buffer: 0,
             oam: [0; 0xff],
 
             ppubus:     PPUBUS::new(mapper),
 
             internal_v: PPUAddress::new(),
             internal_t: PPUAddress::new(),
+
+            fine_x: 0,
 
             bg_nametable_byte:          0,
             bg_attribute_byte:          0,
@@ -247,7 +268,7 @@ impl PPU {
             7 => {
                 self.ppu_data
             }
-            _ => panic!("um endereço invalido foi chamado: {}", addr)
+            _ => panic!("Error, an invalid address was called: {}", addr)
         }
     }
 
@@ -287,10 +308,12 @@ impl PPU {
                     // Primeira escrita: Coarse X e Fine X
                     self.ppu_scrl.write_byte(data);
                     self.internal_t.set_coarse_x((data >> 3) as u8);
+
+                    self.fine_x = data & 0b0000_0111
                     // Salva o fine X scroll, necessário para a renderização
                     // (você precisa de uma nova variável para isso, por exemplo: `fine_x`)
                 } else {
-                    // Segunda escrita: Coarse Y e Fine Y
+
                     self.ppu_scrl.write_byte(data);
                     self.internal_t.set_fine_y(data & 0x07);
                     self.internal_t.set_coarse_y((data >> 3) as u8);
@@ -308,9 +331,20 @@ impl PPU {
                 };
                 false
             },
-            7 => {
-                self.ppubus.write_ppubus(self.ppu_addr.value, data);
-                false
+            7 => { // PPUDATA ($2007)
+                // 1. Escreve o dado na memória usando o endereço 'v' (internal_v)
+                self.ppubus.write_ppubus(self.internal_v.addr, data);
+
+                // 2. INCREMENTA o endereço 'v' automaticamente
+                // O PPUCTRL diz se deve somar 1 (horizontal) ou 32 (vertical)
+                if self.ppu_ctrl.contains(PpuCtrlFlags::IncrementVRAM) {
+                    self.internal_v.addr = self.internal_v.addr.wrapping_add(32);
+                } else {
+                    self.internal_v.addr = self.internal_v.addr.wrapping_add(1);
+                }
+                
+                // Retorna false, pois escrever pixel não gera NMI
+                false 
             }
             _ => panic!("um endereço invalido foi chamado: {}", addr)
         }
@@ -325,20 +359,26 @@ impl PPU {
             
             if self.scanline < 240 && self.cycle < 256 {
                 //for each 8 cicles, the ppu searchs a new tile:
-                if (self.ppu_mask & 0b00001000) != 0 {
+                if (self.ppu_mask & 0b0000_1000) != 0 {
                     if self.cycle % 8 == 0 {
                         self.swap_tile();
                     }
                 }
 
                 //rendering a pixel every cycle
-                let pixel_bit_low    = (self.bg_shifter_pattern_low >> 15) & 0x01;
-                let pixel_bit_high   = (self.bg_shifter_pattern_high >> 15) & 0x01;
-                let palette_bit_low  = (self.bg_shifter_attribute_low >> 15) & 0x01;
-                let palette_bit_high = (self.bg_shifter_attribute_high >> 15) & 0x01;
+                let bit_mux: u16 = 0x8000 >> self.fine_x;
 
-                let pixel_index = (pixel_bit_high << 1) | pixel_bit_low;
-                let palette_index = (palette_bit_high << 1) | palette_bit_low;
+                // Verifica se o bit está ativo na posição escolhida
+                let p0_pixel = (self.bg_shifter_pattern_low & bit_mux) > 0;
+                let p1_pixel = (self.bg_shifter_pattern_high & bit_mux) > 0;
+
+                // Combina os bits (transforma true/false em 1/0)
+                let pixel_index = ((p1_pixel as u8) << 1) | (p0_pixel as u8);
+
+                // Mesma coisa para a paleta
+                let p0_palette = (self.bg_shifter_attribute_low & bit_mux) > 0;
+                let p1_palette = (self.bg_shifter_attribute_high & bit_mux) > 0;
+                let palette_index = ((p1_palette as u8) << 1) | (p0_palette as u8);
 
                 let color_index_in_palette = self.ppubus.read_ppubus(
                     0x3F00 + (palette_index as u16 * 4) + pixel_index as u16
@@ -369,9 +409,24 @@ impl PPU {
 
             }
 
-            if self.cycle == 256 {
-                self.internal_v.incrment_fine_y();
+            //updating internal v with internal t
+            if (self.ppu_mask & 0b0001_1000) != 0 {
+                if self.scanline == 261 {
+                    //ppu copies repeteadly the vertical t into vertical v between cycles 280 and 304
+                    if self.cycle >= 280 && self.cycle <= 304 {
+                        self.internal_v.transfer_address_y(self.internal_t);
+                    }
+                }
+                if self.cycle == 257 { // (visible scanlines + pre-render)
+                    self.internal_v.transfer_address_x(self.internal_t);
+                }
+
+                if self.cycle == 256 {
+                    self.internal_v.increment_fine_y();
+                }
             }
+
+
 
             self.cycle += 1;
 
@@ -417,15 +472,13 @@ impl PPU {
         for n in 0..64 {
             let y_coord = self.oam[n * 4];
             
-            // Check if sprite is in the current scanline range
             if self.scanline >= y_coord as u16 && self.scanline < (y_coord as u16 + sprite_height) {
                 if sprite_count < 8 {
-                    // Copy sprite data to secondary OAM
                     self.secondary_oam[sprite_count as usize * 4] = self.oam[n * 4];
                     self.secondary_oam[sprite_count as usize * 4 + 1] = self.oam[n * 4 + 1];
                     self.secondary_oam[sprite_count as usize * 4 + 2] = self.oam[n * 4 + 2];
                     self.secondary_oam[sprite_count as usize * 4 + 3] = self.oam[n * 4 + 3];
-                    
+
                     if n == 0 {
                         self.sprite_0_in_scanline = true;
                     }
@@ -454,11 +507,17 @@ impl PPU {
 
         //takes the pattern low and high byte
         let pattern_addr = self.internal_v.get_pattern_table_addr(
-            self.ppu_ctrl.clone(), 
+            //self.ppu_ctrl.clone(), //TODO
+            self.ppu_ctrl,
             self.bg_nametable_byte
         );
+        println!("{:#X}", pattern_addr);
         self.bg_low_byte = self.ppubus.read_ppubus(pattern_addr);
         self.bg_high_byte = self.ppubus.read_ppubus(pattern_addr + 8);
+
+        if self.bg_low_byte != 0 || self.bg_high_byte != 0{
+            println!("Li um tile: {:X} / {:X}", self.bg_low_byte, self.bg_high_byte)
+        }
 
         //puts the data back into the shifters
         self.bg_shifter_pattern_low  |= self.bg_low_byte  as u16;
@@ -468,7 +527,6 @@ impl PPU {
         let attribute_shift = (self.internal_v.get_coarse_y() & 0x02) * 2 + (self.internal_v.get_coarse_x() & 0x02);
         let attribute_palette = (self.bg_attribute_byte >> attribute_shift) & 0x03;
 
-        // Coloca os bits de paleta nos shifters (cada 16 bits tem a paleta para um tile inteiro)
         if (attribute_palette & 0b01) != 0 {
             self.bg_shifter_attribute_low |= 0xFF00;
         }
@@ -477,7 +535,7 @@ impl PPU {
         }
         
         //incrmeent sight for the next horizontal tile
-        self.internal_v.incrmeent_coarse_x();
+        self.internal_v.increment_coarse_x();
     }
     
     //VPHB SINN

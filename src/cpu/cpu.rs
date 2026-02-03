@@ -4,9 +4,6 @@
 //though by now i've implemented the ppu NMI and other shenanigans here, maybe it's not a simple 6502 anymore, I can go back look the old git commits...
 //or maybe in the future I can look for another way around to implement the ppu here
 
-
-use macroquad::prelude::warn;
-
 use crate::cpu::opcodes;
 use crate::memory::bus::BUS; 
 use crate::memory::mappers::*;
@@ -748,7 +745,6 @@ impl CPU {
         }
     }
 
-    #[warn(dead_code)]
     pub fn step<F>(&mut self, mut callback: F) -> bool where F: FnMut(&mut CPU) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 

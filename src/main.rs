@@ -95,13 +95,14 @@ async fn main() {
         }
 
         if !emulator.is_paused {
-            //TODO lembrar de colocar isso aqui de volta depois
-            //while !cpu.bus.ppu.frame_complete {
-            //    cpu.step(|_| {});
-            //}
-            
-            for _ in 0..29780 {
+            emulator.cpu.bus.ppu.frame_complete = false;
+
+            while !emulator.cpu.bus.ppu.frame_complete {
                 emulator.cpu.step(|_| {});
+
+                if emulator.cpu.bus.ppu.frame_complete {
+                    break
+                }
             }
         }
 
@@ -119,7 +120,7 @@ async fn main() {
             &emulator.ppu_texture,
             0.0,
             0.0,
-            DARKGRAY,
+            WHITE,
             DrawTextureParams {
                 dest_size: Some(vec2(256.0 * (2.0 * MULTIPLY_RESOLUTION as f32), 240.0 * (2.0 * MULTIPLY_RESOLUTION as f32))), 
                 ..Default::default()

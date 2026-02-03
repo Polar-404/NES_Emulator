@@ -172,9 +172,6 @@ pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
         1 => {
             panic!("Mapper 1 is not suported yet")
         }
-        2 => {
-            todo!()
-        }
         _ => panic!("The given mapper is not suported yet")
     }
 }

@@ -78,7 +78,7 @@ impl PPUBUS {
                 addr &= 0x07FF;
             }
             Mirroring::Horizontal => {
-                addr = (addr & 0x03FF) + (if addr & 0x0400 == 0x0400 { 0 } else { 0x0400 });
+                addr = (addr & 0x03FF) + ((addr & 0x0800) >> 1);
                 
             }
             //TODO didnt implement OneScreen mirroring yet

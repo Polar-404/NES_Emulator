@@ -53,7 +53,7 @@ impl PPUAddress {
         ((self.addr & 0b111_00_00000_00000) >> 12) as u8
     }
 
-    pub fn incrmeent_coarse_x(&mut self) {
+    pub fn increment_coarse_x(&mut self) {
         let mut coarse_x = self.get_coarse_x();
         if coarse_x == 31 {
             coarse_x = 0;
@@ -63,8 +63,8 @@ impl PPUAddress {
         }
         self.set_coarse_x(coarse_x);
     }
-    pub fn incrment_fine_y(&mut self) {
-        let fine_y = self.get_coarse_y();
+    pub fn increment_fine_y(&mut self) {
+        let fine_y = self.get_fine_y();
         if fine_y < 7 {
             self.set_fine_y(fine_y + 1);
         } else {
@@ -98,6 +98,21 @@ impl PPUAddress {
         let pattern_table_base = if ctrl_flags.contains(PpuCtrlFlags::BackGroundPattern) { 0x1000 } else { 0x0000 };
         let addr = pattern_table_base + (tile_id  as u16 * 16) + self.get_fine_y() as u16;
         addr
+    }
+
+    //copies the horizontal position "t" to the current "v"
+    #[inline]
+    pub fn transfer_address_x(&mut self, source: PPUAddress) {
+        // mask: 0000_01_00000_11111 (0x041F)
+        // bits: Coarse X (0-4) + Nametable Select X (bit 10)
+        self.addr = (self.addr & !0b0000_01_00000_11111) | (source.addr & 0b0000_01_00000_11111);
+    }
+    //same but for the vertical position
+    #[inline]
+    pub fn transfer_address_y(&mut self, source: PPUAddress) {
+        // mask: 0b1111_01_1111_00000(0x7BE0)
+        // bits: Fine Y (12-14) + Nametable Select Y (bit 11) + Coarse Y (5-9)
+        self.addr = (self.addr & !0b1111_01_1111_00000) | (source.addr & 0b1111_01_1111_00000);
     }
 
 
