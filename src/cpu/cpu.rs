@@ -1,12 +1,13 @@
 // The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
 // Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
 
-//though by now i've implemented the ppu NMI and other shenanigans here, maybe it's not a simple 6502 anymore, I can go back look the old git commits...
+//though by now i've implemented the ppu nmi/vblank and other shenanigans here, maybe it's not a simple 6502 anymore, I can go back look the old git commits...
 //or maybe in the future I can look for another way around to implement the ppu here
 
 use crate::cpu::opcodes;
 use crate::memory::bus::BUS; 
 use crate::memory::mappers::*;
+use crate::ppu::registers::PpuStatusFlags;
 
 use std::{collections::HashMap};
 
@@ -65,7 +66,7 @@ pub struct CPU {
     pub cycles: u64,
     pub bus: BUS,
     
-    nmi: bool
+    vblank: bool
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -96,7 +97,7 @@ impl CPU {
             program_counter: 0,
             stack_pointer: STACK_RESET,
             bus: BUS::new(mapper),
-            nmi: false,
+            vblank: false,
             cycles: 0,
         }
     }
@@ -157,8 +158,8 @@ impl CPU {
         }
     }
 
-    pub fn trigger_cpu_nmi(&mut self) {
-        //sends the nmi interuption to the cpu
+    pub fn trigger_cpu_vblank(&mut self) {
+        //sends the vblank interuption to the cpu
         self.stack_push_u16(self.program_counter);
         self.status.insert(CpuFlags::BREAK | CpuFlags::BREAK2);
         self.php(); //push processor status
@@ -166,7 +167,9 @@ impl CPU {
         self.status.insert(CpuFlags::INTERRUPT_DISABLE);
 
         self.program_counter = self.bus.mem_read_u16(0xFFFA);
-        self.nmi = false; // Limpa a flag NMI
+        self.bus.ppu.ppu_status.remove(PpuStatusFlags::Sprite0hit);
+
+        self.vblank = false; // Limpa a flag vblank
     }
 
     // comandos de controle de memoria
@@ -177,7 +180,7 @@ impl CPU {
 
     fn mem_write(&mut self, addr: u16, data: u8) {
         if self.bus.mem_write(addr, data) {
-            self.trigger_cpu_nmi();
+            self.trigger_cpu_vblank();
         }
     }
 
@@ -750,8 +753,8 @@ impl CPU {
 
         callback(self);
 
-        if self.nmi {
-            self.trigger_cpu_nmi();
+        if self.vblank {
+            self.trigger_cpu_vblank();
         }
 
         let code = self.mem_read(self.program_counter);
@@ -764,7 +767,7 @@ impl CPU {
 
         self.cycles += opcode.cycles as u64;
         if self.bus.tick(opcode.cycles) {
-            self.nmi = true;
+            self.vblank = true;
         }
 
         match code {

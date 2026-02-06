@@ -1,6 +1,7 @@
 use std::{path::{Path, PathBuf}};
 
 use macroquad::prelude::*;
+use arboard::Clipboard;
 
 use crate::{cpu::cpu::CPU};
 mod cpu;
@@ -15,7 +16,7 @@ extern crate bitflags;
 
 const MULTIPLY_RESOLUTION: i32 = 2;
 
-const DEFAULT_GAME_FILE: &'static str = "C:/Users/migue/OneDrive/Documents/CODEGO/Rust/NES_Emulador/NES_GAMES/Mario/Super Mario Bros. (World).nes";
+const DEFAULT_GAME_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/NES_GAMES/Mario/Super Mario Bros. (World).nes");
 
 struct EmulatorInstance {
     //mapper: Rc<std::cell::RefCell<Box<dyn Mapper + 'static>>>,  ( todo! talvez n seja necessario esse mapper)
@@ -53,6 +54,8 @@ struct EmulatorInstance {
 enum EmulatorState {
     Menu,
 
+    TypingPath,
+
     Loading { game_path: PathBuf },
 
     Running { emulator_instance: EmulatorInstance }
@@ -73,36 +76,23 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf())]
 async fn main() {
- 
+    let mut clipboard = Clipboard::new().ok();
     let mut state = EmulatorState::Menu;
-
-    //unused loop
-        // let mut program: Vec<u8> = vec![0; 0x1FFF];
-        // program[0x0300] = 0xA9; // LDA #$0A
-        // program[0x0301] = 0x0A;
-        // program[0x0302] = 0x85; // STA $00
-        // program[0x0303] = 0x00;
-        // program[0x0304] = 0x4C; // JMP $C000
-        // program[0x0305] = 0xff;
-        // program[0x0306] = 0x00;
-        // program[0x03FC] = 0x00; // Vetor de reset para 0xC000
-        // program[0x03FD] = 0xC0;
+    let mut path_buffer = String::new();
 
     async fn rungame(emulator: &mut EmulatorInstance) {
-
         if is_key_pressed(KeyCode::Space) {
             emulator.is_paused = !emulator.is_paused;
         }
-
         if !emulator.is_paused {
             emulator.cpu.bus.ppu.frame_complete = false;
 
+            //for _ in 0..100 {
+            //    emulator.cpu.step(|_| {});
+            //}
+
             while !emulator.cpu.bus.ppu.frame_complete {
                 emulator.cpu.step(|_| {});
-
-                if emulator.cpu.bus.ppu.frame_complete {
-                    break
-                }
             }
         }
 
@@ -112,10 +102,6 @@ async fn main() {
             emulator.ppu_texture.update(&emulator.image);
         }
 
-        //cpu.step(|_| {});
-
-        // Desenhe a textura da PPU na tela
-        // Você pode ajustar a posição e o tamanho (dest_size) conforme necessário
         draw_texture_ex(
             &emulator.ppu_texture,
             0.0,
@@ -139,7 +125,7 @@ async fn main() {
             let line_height = 30.0; // Altura da linha para espaçamento
             let font_size = 30.0; // Tamanho da fonte
 
-            // dentro da sua função debbuger_info
+            // cpu info
             draw_text(&format!("STATUS: {}", CPU::format_cpu_status(emulator.cpu.status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("PC: {:#06x}", emulator.cpu.program_counter), pos_x, pos_y, font_size, WHITE);
@@ -149,7 +135,7 @@ async fn main() {
             draw_text(&format!("A: {:#04x} | X: {:#04x} | Y: {:#04x}", emulator.cpu.register_a, emulator.cpu.register_x, emulator.cpu.register_y), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height * 2.0;
 
-            // informações da PPU
+            // ppu info
             draw_text(&format!("PPU INFO:"), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("PPUCTRL: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_ctrl.bits(), emulator.cpu.bus.ppu.ppu_ctrl.bits()), pos_x, pos_y, font_size, WHITE);
@@ -167,6 +153,8 @@ async fn main() {
             draw_text(&format!("PPU STATUS: {:?}", emulator.cpu.bus.ppu.format_ppu_status(emulator.cpu.bus.ppu.ppu_status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
+            pos_y += line_height;
+            draw_text(&format!("last read palette: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppubus.last_read_palette, emulator.cpu.bus.ppu.ppubus.last_read_palette), pos_x, pos_y, font_size, WHITE);
         }
     }
 
@@ -184,21 +172,55 @@ async fn main() {
                     println!("Iniciando jogo Padrão");
                     state = EmulatorState::Loading { game_path: PathBuf::from(DEFAULT_GAME_FILE) }
                 } else if is_key_pressed(KeyCode::Key2) {
-                    //println!("Digite o caminho do jogo desejado");
-                    //let mut user_input = String::new();
-                    //std::io::stdin().read_line(&mut user_input).expect("falha ao ler o caminho do jogo");
-                    //println!("Iniciando jogo no caminho {}", user_input);
+                    while get_char_pressed().is_some() { }
 
-                    //state = EmulatorState::Loading { game_path: PathBuf::from(user_input.trim())};
+                    state = EmulatorState::TypingPath;
                 }
             }
+            EmulatorState::TypingPath => {
+                clear_background(DARKBLUE);
+
+                draw_text("Cole ou digite o caminho do arquivo:", 20.0, 50.0, 40.0, BLACK);
+
+                while let Some(c) = get_char_pressed() {
+                // filtel control characters
+                    if !c.is_control() {
+                        path_buffer.push(c);
+                    }
+                }
+
+                if is_key_pressed(KeyCode::Backspace) {
+                    path_buffer.pop();
+                }
+    
+                if is_key_pressed(KeyCode::Enter) && !path_buffer.is_empty() {
+                    state = EmulatorState::Loading { game_path: PathBuf::from(path_buffer.trim()) }
+                }
+
+                if is_key_pressed(KeyCode::Escape) {
+                    state = EmulatorState::Menu;
+                }
+                if is_key_down(KeyCode::LeftControl) && is_key_pressed(KeyCode::V) {
+                    if let Some(ref mut cb) = clipboard {
+                        if let Ok(text) = cb.get_text() {
+                            path_buffer.push_str(&text.replace("\n", "").replace("\r", ""));
+                        }
+                    }
+                }
+
+                let display_text = format!("{}_", path_buffer);
+                draw_text(&display_text, 20.0, 100.0, 30.0, YELLOW);
+                draw_text("Pressione ENTER para confirmar ou ESC para cancelar", 20.0, 150.0, 40.0, BLACK);
+            }
+
             EmulatorState::Loading { game_path } => {
                 draw_text("CARREGANDO...", 200.0, 200.0, 50.0, YELLOW);
                 
-                //Creates an emulator instance ONCE
                 let emu_instance = EmulatorInstance::new(game_path.to_path_buf());
+
+                print_program(&emu_instance);
+                println!("tipo de mirroring: {:?}", emu_instance.cpu.bus.ppu.ppubus.mapper.borrow().mirroring());
                 
-                //Changes it to running once it's done
                 state = EmulatorState::Running { emulator_instance: emu_instance };
             }
             EmulatorState::Running { ref mut emulator_instance } => {
@@ -208,5 +230,16 @@ async fn main() {
 
         next_frame().await
 
+    }
+}
+
+fn print_program(emulator: &EmulatorInstance) {
+    for addr in (0x0000..=0x1FFF).step_by(16) {
+        print!("{:04X}: ", addr);
+        for offset in 0..16 {
+            let byte = emulator.cpu.bus.ppu.ppubus.mapper.borrow().read_chr(addr + offset);
+            print!("{:02X} ", byte);
+        }
+        println!();
     }
 }

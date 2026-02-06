@@ -119,19 +119,23 @@ impl BUS {
     //}
 }
 
-#[derive(Clone, Copy)]
-pub enum Mirroring {
-    Vertical,
-    Horizontal,
-}
-
 //TODO it should possibly return a result and have better error handling
 #[allow(dead_code)]
 pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
-        let rom_data = std::fs::read(path).expect("Failed to extract ROM");
-        let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
+    let rom_data = std::fs::read(path).expect("Failed to extract ROM");
+    let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
+
+    let has_trainer = (rom_data[6] & 0b0000_0100) != 0;
+
+    println!("--- ROM HEADER INFO ---");
+    println!("Byte 4 (PRG Banks): {}", rom_data[4]);
+    println!("Byte 5 (CHR Banks): {}", rom_data[5]);
+    println!("Byte 6 (Flags 6)  : {:08b}", rom_data[6]);
+    println!("Byte 7 (Flags 7)  : {:08b}", rom_data[7]);
+    println!("Mapper ID -> {}", mapper_match);
+    println!("Has Trainer -> {}", has_trainer);
 
     match mapper_match {
         0 => {

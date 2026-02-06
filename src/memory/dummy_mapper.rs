@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::memory::{mappers::Mapper, bus::Mirroring};
+use crate::memory::mappers::{Mapper, Mirroring};
 
 pub struct TestMapper {
     ram: [u8; 0x0800],

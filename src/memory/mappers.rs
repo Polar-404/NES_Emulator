@@ -20,7 +20,11 @@
 
 #[allow(dead_code)] //TODO temporario só pra ele parar de encher o saco
 
-use crate::memory::bus::Mirroring;
+#[derive(Clone, Copy, Debug)]
+pub enum Mirroring {
+    Vertical,
+    Horizontal,
+}
 
 pub trait Mapper {
     fn read(&self, addr: u16) -> u8;
