@@ -30,7 +30,7 @@ impl PPUAddress {
     }
     #[inline]
     pub fn get_coarse_y(&self) -> u8 {
-        (self.addr & 0b11111_00000) as u8
+        ((self.addr & 0b11111_00000) >> 5) as u8
     }
 
     #[inline]
