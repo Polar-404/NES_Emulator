@@ -11,6 +11,7 @@ pub struct TestMapper {
 }
 
 impl TestMapper {
+    #[allow(unused)] // test only mapper
     pub fn new(program: Vec<u8>) -> Rc<RefCell<Box<dyn Mapper>>> {
         let ram = [0; 0x0800];
         

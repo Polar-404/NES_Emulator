@@ -43,31 +43,51 @@ pub trait Mapper {
 pub struct InesMapper000 {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
+    pub prg_ram: Vec<u8>,
     pub mirroring: Mirroring
 }
+//the ability to read at 0x6000 and write at all, isnt something used on the mapper 0 
+//but as far as I understood, blergg tests may use it so its there 
+
 
 impl Mapper for InesMapper000 {
     fn read(&self, addr: u16) -> u8 {
         match addr {
+            //0x6000..=0x7FFF => {
+            //    self.prg_ram[(addr - 0x6000) as usize]
+            //}
+            // PRG-ROM
             0x8000..=0xFFFF => {
                 let prg_len = self.prg_rom.len();
                 let index = (addr - 0x8000) as usize;
-
                 if prg_len == 0x8000 {
                     self.prg_rom[index]
                 } else {
                     self.prg_rom[index % 0x4000]
                 }
             }
-            _ => 0, 
+            _ => {
+                println!("Non mapped address, this might be a bug");
+                0
+            }
         }
     }
 
-    fn write(&mut self, _addr: u16, _val: u8) {
-
+    fn write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x6000..=0x7FFF => {
+                self.prg_ram[(addr - 0x6000) as usize] = val;
+            }
+            _ => {
+                println!("Non mapped address write, this might be a bug");
+            }
+        }
     }
 
     fn read_chr(&self, addr: u16) -> u8 {
+        if self.chr_rom.is_empty() {
+            return 0;
+        }
         self.chr_rom[addr as usize]
     }
     

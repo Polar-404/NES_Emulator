@@ -169,8 +169,11 @@ pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
                     Box::new(InesMapper000 {
                         prg_rom: prg_rom_data,
                         chr_rom: chr_rom_data,
+                        prg_ram: vec![0; 8192],
                         mirroring: mirroring_type
-            })))
+                    })  
+                )
+            )
 
         }
         1 => {

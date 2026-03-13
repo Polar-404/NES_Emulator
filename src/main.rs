@@ -3,7 +3,7 @@ use std::{path::{Path, PathBuf}};
 use macroquad::prelude::*;
 use arboard::Clipboard;
 
-use crate::{cpu::cpu::CPU};
+use crate::cpu::cpu::{CPU, CpuFlags};
 mod cpu;
 mod memory;
 mod ppu;
@@ -17,6 +17,7 @@ extern crate bitflags;
 const MULTIPLY_RESOLUTION: i32 = 2;
 
 const DEFAULT_GAME_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/NES_GAMES/Mario/Super Mario Bros. (World).nes");
+const DEFAULT_GAME_NAME: &str = "Super Mario Bros. (World)";
 
 struct EmulatorInstance {
     //mapper: Rc<std::cell::RefCell<Box<dyn Mapper + 'static>>>,  ( todo! talvez n seja necessario esse mapper)
@@ -33,6 +34,12 @@ struct EmulatorInstance {
         let mut cpu = CPU::new(mapper);
         
         cpu.reset_interrupt();
+
+        //NES TEST FORÇADO
+        //cpu.program_counter = 0xC000; 
+        //cpu.status = CpuFlags::from_bits_truncate(0b100100);
+        //cpu.stack_pointer = 0xFD; 
+        //cpu.cycles = 7;
 
         let image = Image::gen_image_color(256, 240, Color { r: 0.0 , g: 0.0, b: 0.0, a: 1.0 });
         let ppu_texture = Texture2D::from_image(&image);
@@ -81,15 +88,12 @@ async fn main() {
     let mut path_buffer = String::new();
 
     async fn rungame(emulator: &mut EmulatorInstance) {
+        
         if is_key_pressed(KeyCode::Space) {
             emulator.is_paused = !emulator.is_paused;
         }
         if !emulator.is_paused {
             emulator.cpu.bus.ppu.frame_complete = false;
-
-            //for _ in 0..100 {
-            //    emulator.cpu.step(|_| {});
-            //}
 
             while !emulator.cpu.bus.ppu.frame_complete {
                 emulator.cpu.step(|_| {});
@@ -153,8 +157,6 @@ async fn main() {
             draw_text(&format!("PPU STATUS: {:?}", emulator.cpu.bus.ppu.format_ppu_status(emulator.cpu.bus.ppu.ppu_status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("last read palette: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppubus.last_read_palette, emulator.cpu.bus.ppu.ppubus.last_read_palette), pos_x, pos_y, font_size, WHITE);
         }
     }
 
@@ -164,7 +166,7 @@ async fn main() {
                 clear_background(DARKBLUE);
 
                 //USER INPUT
-                let default_game_message = format!("Pressione 1 para carregar o jogo padrão ({})", DEFAULT_GAME_FILE);
+                let default_game_message = format!("Pressione 1 para carregar o jogo padrão ({})", DEFAULT_GAME_NAME);
                 draw_text( &default_game_message, 20.0, 50.0, 30.0, WHITE);
                 draw_text("Pressione '2' para digitar outro caminho.", 20.0, 120.0, 30.0, WHITE);
 
@@ -198,6 +200,7 @@ async fn main() {
                 }
 
                 if is_key_pressed(KeyCode::Escape) {
+                    path_buffer.clear();
                     state = EmulatorState::Menu;
                 }
                 if is_key_down(KeyCode::LeftControl) && is_key_pressed(KeyCode::V) {
@@ -218,7 +221,7 @@ async fn main() {
                 
                 let emu_instance = EmulatorInstance::new(game_path.to_path_buf());
 
-                print_program(&emu_instance);
+                //print_program(&emu_instance);
                 println!("tipo de mirroring: {:?}", emu_instance.cpu.bus.ppu.ppubus.mapper.borrow().mirroring());
                 
                 state = EmulatorState::Running { emulator_instance: emu_instance };
@@ -243,3 +246,10 @@ fn print_program(emulator: &EmulatorInstance) {
         println!();
     }
 }
+
+//fn write_execution_trace(target_start_cycle: i32, target_end_cycle: i32) -> Result<(), String> {
+//    if target_start_cycle >= target_end_cycle {
+//        return Err(String::from("Não é possível dividir por zero!"));
+//    }
+//    Ok(())
+//}

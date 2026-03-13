@@ -1,3 +1,4 @@
 target/
 *.sublime-workspace
 NES_GAMES/
+NES_TEST_ROMS/

@@ -18,7 +18,7 @@ bitflags! {
 
     /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone, Copy)]
     pub struct CpuFlags: u8 {
         const CARRY             = 0b00000001;
         const ZERO              = 0b00000010;
@@ -161,15 +161,20 @@ impl CPU {
     pub fn trigger_cpu_vblank(&mut self) {
         //sends the vblank interuption to the cpu
         self.stack_push_u16(self.program_counter);
-        self.status.insert(CpuFlags::BREAK | CpuFlags::BREAK2);
-        self.php(); //push processor status
+
+        let mut flags_to_push = self.status.clone();
+        
+        flags_to_push.insert(CpuFlags::BREAK2);
+        flags_to_push.remove(CpuFlags::BREAK);
+        
+        self.stack_push(flags_to_push.bits());
 
         self.status.insert(CpuFlags::INTERRUPT_DISABLE);
 
         self.program_counter = self.bus.mem_read_u16(0xFFFA);
-        self.bus.ppu.ppu_status.remove(PpuStatusFlags::Sprite0hit);
 
         self.vblank = false; // Limpa a flag vblank
+
     }
 
     // comandos de controle de memoria
@@ -577,7 +582,7 @@ impl CPU {
     fn stack_pop_u16(&mut self) -> u16 {
         let lo = self.stack_pop() as u16;
         let hi = self.stack_pop() as u16;
-        return (hi << 8) | lo;
+        (hi << 8) | lo
     }
 
     ///RTI - Return from Interrupt
@@ -690,7 +695,7 @@ impl CPU {
         
         let result = sum as u8;
 
-        if (result ^ val) & (result ^ self.register_a) & 0b1000_0000 != 0 { //seta a overflow flag
+        if ((self.register_a ^ val) & (self.register_a ^ result) & 0b1000_0000) != 0 { //seta a overflow flag
             //usa os operadores logicos de XOR para verificar quais bits sao diferentes e dps verifica com 0b100...
             //já q é o bit que quer ser verificado(o unico bit q importa)... se for diferente dos outros significa que
             //ocorreu um overflow, 
@@ -763,7 +768,7 @@ impl CPU {
         let program_counter_state = self.program_counter;
 
 
-        let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido", code));
+        let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido no endereço {:04X}", code, self.program_counter - 1));
 
         self.cycles += opcode.cycles as u64;
         if self.bus.tick(opcode.cycles) {

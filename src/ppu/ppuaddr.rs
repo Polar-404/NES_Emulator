@@ -103,16 +103,13 @@ impl PPUAddress {
     //copies the horizontal position "t" to the current "v"
     #[inline]
     pub fn transfer_address_x(&mut self, source: PPUAddress) {
-        // mask: 0000_01_00000_11111 (0x041F)
-        // bits: Coarse X (0-4) + Nametable Select X (bit 10)
-        self.addr = (self.addr & !0b0000_01_00000_11111) | (source.addr & 0b0000_01_00000_11111);
+        const MASK: u16 = 0b000_01_00000_11111; // 0x041F
+        self.addr = (self.addr & !MASK) | (source.addr & MASK);
     }
-    //same but for the vertical position
     #[inline]
     pub fn transfer_address_y(&mut self, source: PPUAddress) {
-        // mask: 0b1111_01_1111_00000(0x7BE0)
-        // bits: Fine Y (12-14) + Nametable Select Y (bit 11) + Coarse Y (5-9)
-        self.addr = (self.addr & !0b1111_01_1111_00000) | (source.addr & 0b1111_01_1111_00000);
+        const MASK: u16 = 0b111_10_11111_00000; // 0x7BE0
+        self.addr = (self.addr & !MASK) | (source.addr & MASK);
     }
 
 
