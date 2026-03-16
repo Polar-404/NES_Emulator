@@ -17,7 +17,7 @@ impl PPUAddress {
 
     #[inline]
     pub fn set_coarse_x(&mut self, data: u8) {
-        self.addr = (self.addr & 0b111_11_11111_00000) | data as u16
+        self.addr = (self.addr & 0b111_11_11111_00000) | (data as u16 & 0x1F)
     }
     #[inline]
     pub fn get_coarse_x(&self) -> u8 {
@@ -26,7 +26,7 @@ impl PPUAddress {
 
     #[inline]
     pub fn set_coarse_y(&mut self, data: u8) {
-        self.addr = (self.addr & 0b111_11_00000_11111) | ((data as u16) << 5)
+        self.addr = (self.addr & 0b111_11_00000_11111) | ((data as u16 & 0x1F) << 5)
     }
     #[inline]
     pub fn get_coarse_y(&self) -> u8 {
@@ -40,13 +40,13 @@ impl PPUAddress {
     }
     #[inline]
     #[allow(unused)] //TODO
-    pub fn get_namtable(&self) -> u8 {
+    pub fn get_nametable(&self) -> u8 {
         ((self.addr & 0b000_11_00000_00000) >> 10) as u8
     }
 
     #[inline]
     pub fn set_fine_y(&mut self, val: u8) {
-        self.addr = (self.addr & 0b000_11_11111_11111) | ((val as u16) << 12);
+        self.addr = (self.addr & 0b000_11_11111_11111) | ((val as u16 & 0x07) << 12)
     }
     #[inline]
     pub fn get_fine_y(&self) -> u8 {
@@ -113,4 +113,150 @@ impl PPUAddress {
     }
 
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── set/get coarse_x ─────────────────────────────────────────────────
+
+    #[test]
+    fn coarse_x_roundtrip() {
+        let mut a = PPUAddress::new();
+        for x in 0u8..=31 {
+            a.set_coarse_x(x);
+            assert_eq!(a.get_coarse_x(), x);
+        }
+    }
+
+    #[test]
+    fn coarse_x_doesnt_corrupt_other_bits() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(0b111);
+        a.set_coarse_y(0b11111);
+        a.set_coarse_x(0b10101);
+        assert_eq!(a.get_fine_y(),   0b111);
+        assert_eq!(a.get_coarse_y(), 0b11111);
+        assert_eq!(a.get_coarse_x(), 0b10101);
+    }
+
+    // ── set/get coarse_y ─────────────────────────────────────────────────
+
+    #[test]
+    fn coarse_y_roundtrip() {
+        let mut a = PPUAddress::new();
+        for y in 0u8..=31 {
+            a.set_coarse_y(y);
+            assert_eq!(a.get_coarse_y(), y);
+        }
+    }
+
+    #[test]
+    fn coarse_y_doesnt_corrupt_other_bits() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(0b111);
+        a.set_coarse_x(0b11111);
+        a.set_coarse_y(0b10101);
+        assert_eq!(a.get_fine_y(),   0b111);
+        assert_eq!(a.get_coarse_x(), 0b11111);
+        assert_eq!(a.get_coarse_y(), 0b10101);
+    }
+
+    // ── set/get fine_y ───────────────────────────────────────────────────
+
+    #[test]
+    fn fine_y_roundtrip() {
+        let mut a = PPUAddress::new();
+        for y in 0u8..=7 {
+            a.set_fine_y(y);
+            assert_eq!(a.get_fine_y(), y);
+        }
+    }
+
+    #[test]
+    fn fine_y_doesnt_corrupt_other_bits() {
+        let mut a = PPUAddress::new();
+        a.set_coarse_x(0b11111);
+        a.set_coarse_y(0b11111);
+        a.set_fine_y(0b101);
+        assert_eq!(a.get_coarse_x(), 0b11111);
+        assert_eq!(a.get_coarse_y(), 0b11111);
+        assert_eq!(a.get_fine_y(),   0b101);
+    }
+
+    #[test]
+    fn increment_coarse_x_basic() {
+        let mut a = PPUAddress::new();
+        a.set_coarse_x(0);
+        a.increment_coarse_x();
+        assert_eq!(a.get_coarse_x(), 1);
+    }
+
+    #[test]
+    fn increment_coarse_x_wrap_31_to_0_and_changes_nametable_to_h() {
+        let mut a = PPUAddress::new();
+        a.set_coarse_x(31);
+        let nt_before = (a.addr >> 10) & 0x01; // bit 10 = nametable horizontal
+        a.increment_coarse_x();
+        assert_eq!(a.get_coarse_x(), 0);
+        let nt_after = (a.addr >> 10) & 0x01;
+        assert_ne!(nt_before, nt_after); // bit deve ter flipado
+    }
+
+    #[test]
+    fn increment_coarse_x_doesnt_corrupts_other_bits() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(0b101);
+        a.set_coarse_y(0b10101);
+        a.set_coarse_x(5);
+        a.increment_coarse_x();
+        assert_eq!(a.get_fine_y(),   0b101);
+        assert_eq!(a.get_coarse_y(), 0b10101);
+        assert_eq!(a.get_coarse_x(), 6);
+    }
+
+    // ── increment_fine_y ─────────────────────────────────────────────────
+
+    #[test]
+    fn increment_fine_y_basic() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(3);
+        a.increment_fine_y();
+        assert_eq!(a.get_fine_y(), 4);
+    }
+
+    #[test]
+    fn increment_fine_y_wrap_7_increment_coarse_y() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(7);
+        a.set_coarse_y(10);
+        a.increment_fine_y();
+        assert_eq!(a.get_fine_y(),   0);
+        assert_eq!(a.get_coarse_y(), 11);
+    }
+
+    #[test]
+    fn increment_fine_y_coarse_y_29_wrap_and_changes_nametable_to_v() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(7);
+        a.set_coarse_y(29);
+        let nt_before = (a.addr >> 11) & 0x01; // bit 11 = nametable vertical
+        a.increment_fine_y();
+        assert_eq!(a.get_fine_y(),   0);
+        assert_eq!(a.get_coarse_y(), 0);
+        let nt_after = (a.addr >> 11) & 0x01;
+        assert_ne!(nt_before, nt_after);
+    }
+
+    #[test]
+    fn increment_fine_y_coarse_y_31_wrap_without_nametable_changes() {
+        let mut a = PPUAddress::new();
+        a.set_fine_y(7);
+        a.set_coarse_y(31);
+        let nt_before = (a.addr >> 10) & 0x03;
+        a.increment_fine_y();
+        assert_eq!(a.get_coarse_y(), 0);
+        assert_eq!((a.addr >> 10) & 0x03, nt_before); // nametable intacto
+    }
 }

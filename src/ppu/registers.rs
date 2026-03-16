@@ -15,8 +15,42 @@ impl PpuCtrlFlags {
     pub fn new() -> Self {
         PpuCtrlFlags::from_bits_truncate(0b0000_0000)
     }
+    
+    #[inline]
     pub fn generate_vblank_nmi(&self) -> bool {
-        return self.contains(PpuCtrlFlags::VblankNMI);
+        self.contains(PpuCtrlFlags::VblankNMI)
+    }
+}
+
+
+// 7  bit  0
+// ---- ----
+// BGRs bMmG
+// |||| ||||
+// |||| |||+- Greyscale (0: normal color, 1: greyscale)
+// |||| ||+-- 1: Show background in leftmost 8 pixels of screen, 0: Hide
+// |||| |+--- 1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+// |||| +---- 1: Enable background rendering
+// |||+------ 1: Enable sprite rendering
+// ||+------- Emphasize red (green on PAL/Dendy)
+// |+-------- Emphasize green (red on PAL/Dendy)
+// +--------- Emphasize blue
+bitflags! {
+    #[derive(Debug)]
+    pub struct PpuMaskFlags: u8 {
+        const Greyscale         = 0b0000_0001;
+        const ShowBackground    = 0b0000_0010;
+        const ShowSprites       = 0b0000_0100;
+        const EnableBackground  = 0b0000_1000;
+        const EnableSprites     = 0b0001_0000;
+        const EmphasizeRed      = 0b0010_0000;
+        const EmphasizeGreen    = 0b0100_0000;
+        const EmphasizeBlue     = 0b1000_0000;
+    }
+}
+impl PpuMaskFlags {
+    pub fn new() -> Self {
+        PpuMaskFlags::from_bits_truncate(0b0000_0000)
     }
 }
 
@@ -39,30 +73,41 @@ impl PpuStatusFlags {
     }
 }
 
-pub struct DoubleWriteRegister {
-    pub value: u16,
-    pub is_first_write: bool,
-}
-impl DoubleWriteRegister {
-    pub fn new() -> Self {
-        DoubleWriteRegister {
-            value: 0,
-            is_first_write: true,
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ctrl_vblank_nmi_disabled_by_default() {
+        let ctrl = PpuCtrlFlags::new();
+        assert!(!ctrl.generate_vblank_nmi());
     }
-    
-    // Método para a PPU escrever nele
-    pub fn write_byte(&mut self, data: u8) {
-        if self.is_first_write {
-            self.value = ((data as u16) << 8) | (self.value & 0x00FF);
-        } else {
-            self.value = (self.value & 0xFF00) | (data as u16);
-        }
-        self.is_first_write = !self.is_first_write;
+
+    #[test]
+    fn ctrl_vblank_nmi_enabled() {
+        let ctrl = PpuCtrlFlags::from_bits_truncate(0b10000000);
+        assert!(ctrl.generate_vblank_nmi());
     }
-    
-    // Método para resetar o estado de escrita dupla (chamado pela leitura de $2002)
-    pub fn reset_latch(&mut self) {
-        self.is_first_write = true;
+
+    #[test]
+    fn ctrl_background_pattern_bit() {
+        let ctrl = PpuCtrlFlags::from_bits_truncate(0b00010000);
+        assert!(ctrl.contains(PpuCtrlFlags::BackGroundPattern));
+    }
+
+    #[test]
+    fn ctrl_increment_vram_bit() {
+        let ctrl = PpuCtrlFlags::from_bits_truncate(0b00000100);
+        assert!(ctrl.contains(PpuCtrlFlags::IncrementVRAM));
+    }
+
+    #[test]
+    fn status_vblank_set_and_clear() {
+        let mut status = PpuStatusFlags::new();
+        assert!(!status.contains(PpuStatusFlags::VblankFlag));
+        status.insert(PpuStatusFlags::VblankFlag);
+        assert!(status.contains(PpuStatusFlags::VblankFlag));
+        status.remove(PpuStatusFlags::VblankFlag);
+        assert!(!status.contains(PpuStatusFlags::VblankFlag));
     }
 }

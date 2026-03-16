@@ -7,7 +7,6 @@
 use crate::cpu::opcodes;
 use crate::memory::bus::BUS; 
 use crate::memory::mappers::*;
-use crate::ppu::registers::PpuStatusFlags;
 
 use std::{collections::HashMap};
 
@@ -158,7 +157,7 @@ impl CPU {
         }
     }
 
-    pub fn trigger_cpu_vblank(&mut self) {
+    pub fn trigger_cpu_nmi(&mut self) {
         //sends the vblank interuption to the cpu
         self.stack_push_u16(self.program_counter);
 
@@ -185,7 +184,7 @@ impl CPU {
 
     fn mem_write(&mut self, addr: u16, data: u8) {
         if self.bus.mem_write(addr, data) {
-            self.trigger_cpu_vblank();
+            self.trigger_cpu_nmi();
         }
     }
 
@@ -753,13 +752,14 @@ impl CPU {
         }
     }
 
-    pub fn step<F>(&mut self, mut callback: F) -> bool where F: FnMut(&mut CPU) {
+    pub fn step<F>(&mut self, mut callback: F) -> bool 
+    where F: FnMut(&mut CPU) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
         callback(self);
 
         if self.vblank {
-            self.trigger_cpu_vblank();
+            self.trigger_cpu_nmi();
         }
 
         let code = self.mem_read(self.program_counter);

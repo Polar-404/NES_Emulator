@@ -142,21 +142,21 @@ async fn main() {
             // ppu info
             draw_text(&format!("PPU INFO:"), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
-            draw_text(&format!("PPUCTRL: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_ctrl.bits(), emulator.cpu.bus.ppu.ppu_ctrl.bits()), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPUMASK: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_mask, emulator.cpu.bus.ppu.ppu_mask), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPUSTATUS: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_status.bits(), emulator.cpu.bus.ppu.ppu_status.bits()), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("OAMADDR: {:#04x}", emulator.cpu.bus.ppu.oam_addr), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPUADDR (VRAM): {:#06x}", emulator.cpu.bus.ppu.ppu_addr.value), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPU Cycle: {} | Scanline: {}", emulator.cpu.bus.ppu.cycle, emulator.cpu.bus.ppu.scanline), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPU STATUS: {:?}", emulator.cpu.bus.ppu.format_ppu_status(emulator.cpu.bus.ppu.ppu_status.bits())), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
+            // draw_text(&format!("PPUCTRL: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_ctrl.bits(), emulator.cpu.bus.ppu.ppu_ctrl.bits()), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("PPUMASK: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_mask, emulator.cpu.bus.ppu.ppu_mask), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("PPUSTATUS: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ppu_status.bits(), emulator.cpu.bus.ppu.ppu_status.bits()), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("OAMADDR: {:#04x}", emulator.cpu.bus.ppu.oam_addr), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("PPUADDR (VRAM): {:#06x}", emulator.cpu.bus.ppu.ppu_addr.value), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("PPU Cycle: {} | Scanline: {}", emulator.cpu.bus.ppu.cycle, emulator.cpu.bus.ppu.scanline), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("PPU STATUS: {:?}", emulator.cpu.bus.ppu.format_ppu_status(emulator.cpu.bus.ppu.ppu_status.bits())), pos_x, pos_y, font_size, WHITE);
+            // pos_y += line_height;
+            // draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
         }
     }
 
