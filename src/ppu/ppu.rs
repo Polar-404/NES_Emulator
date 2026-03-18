@@ -14,6 +14,25 @@ use super::{
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
+#[derive(Debug, Clone)]
+enum State {
+    Visible,
+    PostRender,
+    VBlank,
+    PreRender,
+}
+
+impl State {
+    fn match_ppu_state(&mut self, scanline: &usize) -> State {
+        match scanline {
+            0..=239   => Self::Visible,
+            240       => Self::PostRender,
+            241..=260 => Self::VBlank,
+            _         => Self::PreRender
+        }
+    }
+}
+
 pub struct PPU {
 
     pub cycle: u16,
@@ -95,32 +114,141 @@ impl PPU {
         }
     }
 
+    /// https://www.nesdev.org/wiki/PPU_registers#Summary
     pub fn read_registers(&mut self, addr: u8) -> u8 {
         todo!()
     }
+
+    /// https://www.nesdev.org/wiki/PPU_registers#Summary
     pub fn write_registers(&mut self, addr: u16, val: u8) -> bool {
-        todo!()
+        match addr & 0x07 {
+            0x00 => {
+                self.ctrl = PpuCtrlFlags::from_bits_truncate(val);
+                let base_nametable_address = (val & 0b11) as u16;
+                self.t.addr = (self.t.addr & 0b111_00_11111_11111) | (base_nametable_address << 10)
+            }
+            0x01 => {
+                self.mask =PpuMaskFlags::from_bits_truncate(val);
+            }
+            0x02 => {}
+            0x03 => {
+                //OAM ADDR 
+                //todo!()
+            }
+            0x04 => {
+                //OAM DATA 
+                //todo!()
+            }
+            //https://www.nesdev.org/wiki/PPU_registers#PPUSCROLL
+            0x05 => {
+                if !self.w {
+                    self.fine_x = val & 0b111;
+                    self.t.set_coarse_x(val >> 3);
+                    self.w = true;
+                } else {
+                    self.t.set_fine_y(val & 0b111);
+                    self.t.set_coarse_y(val >> 3);
+                    self.w = false;
+                }
+            }
+            //https://www.nesdev.org/wiki/PPU_registers#PPUADDR
+            //The CPU writes to VRAM through a pair of registers on the PPU by first loading
+            // an address into PPUADDR and then writing data repeatedly to PPUDATA. The VRAM
+            0x06 => {
+                if !self.w {
+                    self.t.addr = ((val as u16 & 0x3F) << 8) | (self.t.addr & 0x00FF);
+                    self.w = true
+                } else {
+                    self.t.addr = val as u16 | (self.t.addr & 0xFF00);
+                    self.v = self.t;
+                    self.w = false
+                }
+            }
+            0x07 => {
+                self.ppubus.write_ppubus(self.v.addr, val);
+                if self.ctrl.contains(PpuCtrlFlags::IncrementVRAM) {
+                    self.v.addr = self.v.addr.wrapping_add(32)
+                } else {
+                    self.v.addr = self.v.addr.wrapping_add(1)
+                }
+            }
+
+            _ => panic!("unvalid write addr: {}", addr)
+        }
+        false
     }
+
     pub fn tick(&mut self, cycles: u16) -> bool {
         todo!()
     }
 }
 
-#[derive(Debug, Clone)]
-enum State {
-    Visible,
-    PostRender,
-    VBlank,
-    PreRender,
-}
+mod tests {
+    use super::*;
+    use crate::memory::dummy_mapper::TestMapper;
 
-impl State {
-    fn match_ppu_state(&mut self, scanline: &usize) -> State {
-        match scanline {
-            0..=239   => Self::Visible,
-            240       => Self::PostRender,
-            241..=260 => Self::VBlank,
-            _         => Self::PreRender
-        }
+    fn make_ppu() -> PPU {
+        PPU::new(TestMapper::new(vec![]))
+    }
+
+    #[test]
+    fn write_ppuctrl_updates_nametable_in_t() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x00, 0b00000011); // nametable = 3
+        assert_eq!((ppu.t.addr >> 10) & 0x03, 3);
+    }
+
+    #[test]
+    fn write_ppuscroll_first_write_updates_fine_x_and_coarse_x() {
+        let mut ppu = make_ppu();
+        // val = 0b00101_011 -> coarse_x = 5, fine_x = 3
+        ppu.write_registers(0x05, 0b00101_011);
+        assert_eq!(ppu.fine_x, 3);
+        assert_eq!(ppu.t.get_coarse_x(), 5);
+        assert!(ppu.w);
+    }
+
+    #[test]
+    fn write_ppuscroll_second_write_updates_coarse_y_and_fine_y() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x05, 0b00101_011); // first
+        ppu.write_registers(0x05, 0b01000_110); // second: coarse_y = 8, fine_y = 6
+        assert_eq!(ppu.t.get_coarse_y(), 8);
+        assert_eq!(ppu.t.get_fine_y(), 6);
+        assert!(!ppu.w);
+    }
+
+    #[test]
+    fn write_ppuaddr_clears_bit_15() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x06, 0xFF);
+        ppu.write_registers(0x06, 0x00);
+        assert_eq!(ppu.v.addr & 0x8000, 0); // bit 15 must be zero
+    }
+
+    #[test]
+    fn write_ppuaddr_two_writes_update_v() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x06, 0x21); // high byte
+        ppu.write_registers(0x06, 0x00); // low byte -> v = $2100
+        assert_eq!(ppu.v.addr, 0x2100);
+    }
+    #[test]
+    fn write_ppudata_increments_v_by_1_by_default() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x06, 0x20);
+        ppu.write_registers(0x06, 0x00);
+        ppu.write_registers(0x07, 0xAB);
+        assert_eq!(ppu.v.addr, 0x2001);
+    }
+
+    #[test]
+    fn write_ppudata_increments_v_by_32_when_flag_set() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x00, 0b00000100); // IncrementVRAM
+        ppu.write_registers(0x06, 0x20);
+        ppu.write_registers(0x06, 0x00);
+        ppu.write_registers(0x07, 0xAB);
+        assert_eq!(ppu.v.addr, 0x2020);
     }
 }
