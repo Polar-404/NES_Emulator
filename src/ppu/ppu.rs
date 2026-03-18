@@ -1,5 +1,6 @@
 use crate::{memory::mappers::Mapper};
 
+use core::panic;
 use std::{rc::Rc, vec};
 use std::cell::RefCell;
 
@@ -116,7 +117,46 @@ impl PPU {
 
     /// https://www.nesdev.org/wiki/PPU_registers#Summary
     pub fn read_registers(&mut self, addr: u8) -> u8 {
-        todo!()
+        match addr & 0x07 {
+
+            0x02 => {
+                let status = (self.status.bits() & 0xE0) | (self.data_buffer & 0x1F);
+                self.status.remove(PpuStatusFlags::VblankFlag);
+                self.w = false;
+                status
+            }
+
+            0x04 => {
+                //	OAM data read/write
+                //todo!()
+                0
+            }
+
+            0x07 => {
+                //reading is delayed by a cycle, it returns the old buffer and loads next one
+
+                let data = self.data_buffer;
+                self.data_buffer = self.ppubus.read_ppubus(self.v.addr);
+
+                // EXCEPTION: palette ram has no delay, it discards the old addr and returns the current one
+                let result = if self.v.addr >= 0x3F00 {
+                    self.data_buffer
+                } else {
+                    data
+                };
+
+                if self.ctrl.contains(PpuCtrlFlags::IncrementVRAM) {
+                    self.v.addr = self.v.addr.wrapping_add(32);
+                } else {
+                    self.v.addr = self.v.addr.wrapping_add(1);
+                }
+
+                result
+            }
+
+            _ => panic!("Program tried to read register ${:?}", (addr & 0x07)),
+
+        }
     }
 
     /// https://www.nesdev.org/wiki/PPU_registers#Summary
@@ -183,10 +223,11 @@ impl PPU {
     }
 }
 
-mod tests {
+mod write_registers_tests {
     use super::*;
     use crate::memory::dummy_mapper::TestMapper;
 
+    #[allow(unused)]
     fn make_ppu() -> PPU {
         PPU::new(TestMapper::new(vec![]))
     }
@@ -249,6 +290,94 @@ mod tests {
         ppu.write_registers(0x06, 0x20);
         ppu.write_registers(0x06, 0x00);
         ppu.write_registers(0x07, 0xAB);
+        assert_eq!(ppu.v.addr, 0x2020);
+    }
+}
+mod read_registers_tests {
+    use super::*;
+    use crate::memory::dummy_mapper::TestMapper;
+
+    #[allow(unused)]
+    fn make_ppu() -> PPU {
+        PPU::new(TestMapper::new(vec![]))
+    }
+
+    #[test]
+    fn read_ppustatus_returns_vblank_flag() {
+        let mut ppu = make_ppu();
+        ppu.status.insert(PpuStatusFlags::VblankFlag);
+        let val = ppu.read_registers(0x02);
+        assert!(val & 0x80 != 0);
+    }
+
+    #[test]
+    fn read_ppustatus_clears_vblank_flag() {
+        let mut ppu = make_ppu();
+        ppu.status.insert(PpuStatusFlags::VblankFlag);
+        ppu.read_registers(0x02);
+        assert!(!ppu.status.contains(PpuStatusFlags::VblankFlag));
+    }
+
+    #[test]
+    fn read_ppustatus_resets_write_latch() {
+        let mut ppu = make_ppu();
+        ppu.w = true;
+        ppu.read_registers(0x02);
+        assert!(!ppu.w);
+    }
+
+    #[test]
+    fn read_ppudata_is_buffered() {
+        let mut ppu = make_ppu();
+        // writes something in VRAM at $2000
+        ppu.write_registers(0x06, 0x20);
+        ppu.write_registers(0x06, 0x00);
+        ppu.write_registers(0x07, 0xAB);
+
+        // resets addr to $2000
+        ppu.write_registers(0x06, 0x20);
+        ppu.write_registers(0x06, 0x00);
+
+        // first read: returns buffer's trash (no data yet)
+        let first = ppu.read_registers(0x07);
+        //second read: now returns 0xAB
+        let second = ppu.read_registers(0x07);
+
+        assert_ne!(first, 0xAB);
+        assert_eq!(second, 0xAB);
+    }
+
+    #[test]
+    fn read_ppudata_palette_has_no_delay() {
+        let mut ppu = make_ppu();
+
+        ppu.write_registers(0x06, 0x3F);
+        ppu.write_registers(0x06, 0x05);
+        ppu.write_registers(0x07, 0x15);
+
+        ppu.write_registers(0x06, 0x3F);
+        ppu.write_registers(0x06, 0x05);
+        
+        let val = ppu.read_registers(0x07);
+        assert_eq!(val, 0x15);
+    }
+
+    #[test]
+    fn read_ppudata_increments_v_by_1() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x06, 0x20);
+        ppu.write_registers(0x06, 0x00);
+        ppu.read_registers(0x07);
+        assert_eq!(ppu.v.addr, 0x2001);
+    }
+
+    #[test]
+    fn read_ppudata_increments_v_by_32_when_flag_set() {
+        let mut ppu = make_ppu();
+        ppu.write_registers(0x00, 0b00000100); // IncrementVRAM
+        ppu.write_registers(0x06, 0x20);
+        ppu.write_registers(0x06, 0x00);
+        ppu.read_registers(0x07);
         assert_eq!(ppu.v.addr, 0x2020);
     }
 }
