@@ -78,6 +78,18 @@ impl BUS {
                 false
             }
             0x4000..=0x4017 => {
+
+                if addr == 0x4014 {
+                    // val é a página — ex: 0x02 significa $0200-$02FF
+                    let page_start = (val as u16) << 8;
+                    let mut page = [0u8; 256];
+                    for i in 0..256u16 {
+                        page[i as usize] = self.mem_read(page_start + i);
+                    }
+                    self.ppu.oam_dma_write(&page);
+                    return false;
+                }
+                
                 let addr = addr - 0x4000;
                 self.nes_apu_and_io_registers[addr as usize] = val;
                 false
@@ -110,7 +122,13 @@ impl BUS {
     }
 
     pub fn tick(&mut self, cycles: u8) -> bool {
-        self.ppu.tick(cycles as u16 * 3)
+        self.ppu.tick(cycles as u16 * 3);
+
+        if self.ppu.nmi_occurred {
+            self.ppu.nmi_occurred = false;
+            return true;
+        }
+        false
     }
     
     //pub fn load(&mut self, program: Vec<u8>) {

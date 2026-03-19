@@ -65,7 +65,7 @@ pub struct CPU {
     pub cycles: u64,
     pub bus: BUS,
     
-    vblank: bool
+    pub vblank: bool
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -177,12 +177,12 @@ impl CPU {
     }
 
     // comandos de controle de memoria
-    fn mem_read(&mut self, addr: u16) -> u8 {
+    pub fn mem_read(&mut self, addr: u16) -> u8 {
         let val = self.bus.mem_read(addr);
         val
     }
 
-    fn mem_write(&mut self, addr: u16, data: u8) {
+    pub fn mem_write(&mut self, addr: u16, data: u8) {
         if self.bus.mem_write(addr, data) {
             self.trigger_cpu_nmi();
         }
@@ -349,6 +349,7 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         let data = self.mem_read(addr);
         self.register_a = self.register_a & data;
+        self.update_zero_and_negative_flags(self.register_a);
     }
     ///BIT - Bit Test
     fn bit(&mut self, mode: &AddressingMode) {

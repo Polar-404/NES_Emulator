@@ -51,15 +51,17 @@ pub struct PPU {
     odd_frame: bool,
 
     // ── Registers($2000–$2007) ───────────────────────────────────
-    ctrl:   PpuCtrlFlags,
-    mask:   PpuMaskFlags,
-    status: PpuStatusFlags,
+    pub ctrl:   PpuCtrlFlags,
+    pub mask:   PpuMaskFlags,
+    pub status: PpuStatusFlags,
 
     data_buffer: u8, // leitura de $2007 é atrasada um ciclo
 
+    pub oam: [u8; 0x100],
+
     // ── Registers Loopy ───────────────────────────────────────────
-    v: PPUAddress, // endereço VRAM atual
-    t: PPUAddress, // endereço VRAM temporário (canto superior esquerdo)
+    pub v: PPUAddress, // endereço VRAM atual
+    pub t: PPUAddress, // endereço VRAM temporário (canto superior esquerdo)
     fine_x: u8,    // scroll X fino (3 bits)
     w: bool,       // latch de escrita: false = primeira, true = segunda
 
@@ -82,7 +84,7 @@ impl PPU {
             cycle: 0, 
             scanline: 0, 
 
-            frame_buffer: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT * 3].into_boxed_slice(), 
+            frame_buffer: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT * 4].into_boxed_slice(),  // *4 to RGBA channels
             frame_complete: false,
 
             state:      State::Visible,
@@ -96,6 +98,8 @@ impl PPU {
             mask: PpuMaskFlags::new(),
             status: PpuStatusFlags::new(),
             data_buffer: 0,
+
+            oam: [0; 0x100],
 
             v: PPUAddress::new(),
             t: PPUAddress::new(),
@@ -222,9 +226,7 @@ impl PPU {
         for _ in 0..cycles {
             self.clock();
         }
-        let complete = self.frame_complete;
-        self.frame_complete = false;
-        complete
+        self.frame_complete
     }
 
     fn clock(&mut self) {
@@ -246,19 +248,206 @@ impl PPU {
         self.increase_cycle();
     }
 
-    fn render_scanline(&mut self) {
-        todo!()
-    }
-
     fn increase_cycle(&mut self) {
         self.cycle += 1;
         if self.cycle > 340 {
             self.cycle = 0;
             self.scanline += 1;
-            if self.scanline > 241 {
+            if self.scanline > 260 {
                 self.scanline = -1;
                 self.frame_complete = true;
             }
+        }
+    }
+
+    fn render_scanline(&mut self) {
+        let is_prerender = self.scanline == -1;
+        let is_visible = self.scanline >= 0;
+
+        if is_prerender && self.cycle == 1 {
+            self.status.remove(PpuStatusFlags::VblankFlag);
+            self.status.remove(PpuStatusFlags::SpriteOverflow);
+            self.status.remove(PpuStatusFlags::Sprite0hit);
+        }
+        
+        let in_fetch_range = (self.cycle >= 1 && self.cycle <= 256)
+        || (self.cycle >= 321 && self.cycle <= 336); // fetch tile range (cycles 1-256 and 321-336)
+
+        if in_fetch_range {
+            self.update_shifters();
+
+            match (self.cycle - 1) % 8 {
+                0 => {
+                    self.load_background_shifters();
+                    self.bg_next_tile_id = self.ppubus.read_ppubus(self.v.get_nametable_addr())
+                } //reads tiles from nametable (which tile to draw)
+                2 => {
+                    let attr = self.ppubus.read_ppubus(self.v.get_attribute_addr());
+                    let shift = ((self.v.get_coarse_y() & 0b10) << 1) | (self.v.get_coarse_x() & 0b10);
+                    self.bg_next_tile_attr = (attr >> shift) & 0b11;
+                } //reads atribute (which palete to use)
+                4 => {
+                    let addr = self.v.get_pattern_table_addr(self.ctrl, self.bg_next_tile_id);
+                    self.bg_next_tile_lo = self.ppubus.read_ppubus(addr);
+                } //reads low bit plane   (pattern table, plane 0)
+                6 => {
+                    let addr = self.v.get_pattern_table_addr(self.ctrl, self.bg_next_tile_id) + 8;
+                    self.bg_next_tile_hi = self.ppubus.read_ppubus(addr);
+                }
+                7 => {
+                    if self.mask.contains(PpuMaskFlags::EnableBackground) {
+                        self.v.increment_coarse_x();
+                    }
+                } // reads high bit plane (pattern table, bit 1) and increments coarse x
+                _ => {}
+            }
+        }
+
+        // ── end of scanline adjusts ──────────────────────────────────────
+        if self.cycle == 256 && self.mask.contains(PpuMaskFlags::EnableBackground) {
+            self.v.increment_fine_y();
+        }
+        if self.cycle == 257 {
+            self.load_background_shifters();
+            if self.mask.contains(PpuMaskFlags::EnableBackground) {
+                self.v.transfer_address_x(self.t);
+            }
+        }
+        // ── Pre-render: loads Y from t -> v at the cycles: 280-304 ───────
+        if is_prerender 
+        && self.cycle >= 280 
+        && self.cycle <= 304
+        && self.mask.contains(PpuMaskFlags::EnableBackground) {
+            self.v.transfer_address_y(self.t);
+        }
+
+        if is_visible && self.cycle >= 1 && self.cycle <= 256 {
+            self.render_pixel();
+        }
+    }
+
+    fn load_background_shifters(&mut self) {
+        self.bg_shift_lo = (self.bg_shift_lo & 0xFF00) | self.bg_next_tile_lo as u16;
+        self.bg_shift_hi = (self.bg_shift_hi & 0xFF00) | self.bg_next_tile_hi as u16;
+
+        self.bg_attr_shift_lo = (self.bg_attr_shift_lo & 0xFF00)
+            | if self.bg_next_tile_attr & 0x01 != 0 {0xFF} else {0x00};
+        self.bg_attr_shift_hi = (self.bg_attr_shift_hi & 0xFF00)
+            | if self.bg_next_tile_attr & 0x02 != 0 {0xFF} else {0x00};
+
+    }
+    fn update_shifters(&mut self) {
+        if self.mask.contains(PpuMaskFlags::EnableBackground) {
+            self.bg_attr_shift_hi   <<= 1;
+            self.bg_attr_shift_lo   <<= 1;
+            self.bg_shift_hi        <<= 1;
+            self.bg_shift_lo        <<= 1;
+        }
+    }
+    fn render_pixel(&mut self) {
+        let mux: u16 = 0x8000 >> self.fine_x;
+
+        let p0 = ((self.bg_shift_lo & mux) != 0) as u8;
+        let p1 = ((self.bg_shift_hi & mux) != 0) as u8;
+        let pixel = (p1 << 1) | p0;
+
+        let a0 = ((self.bg_attr_shift_lo & mux) != 0) as u8;
+        let a1 = ((self.bg_attr_shift_hi & mux) != 0) as u8;
+        let palette = (a1 << 1) | a0;
+
+        self.check_sprite0_hit(pixel);
+
+        let palette_addr = if pixel == 0 {
+            0x3F00
+        } else {
+            0x3F00 | (palette as u16) << 2 | pixel as u16
+        };
+
+        let color_idx = (self.ppubus.read_ppubus(palette_addr) as usize) & 0x3F;
+        let color = NTSC_PALETTE[color_idx];
+
+        let x = (self.cycle - 1) as usize;
+        let y = self.scanline as usize;
+        let i = (y * SCREEN_WIDTH + x) * 4;
+
+        self.frame_buffer[i]        = color.r;
+        self.frame_buffer[i + 1]    = color.g;
+        self.frame_buffer[i + 2]    = color.b;
+        self.frame_buffer[i + 3]    = 255; //RGBA alpha always 255
+    }
+
+    pub fn oam_dma_write(&mut self, data: &[u8; 256]) {
+        self.oam.copy_from_slice(data);
+    }
+
+    fn check_sprite0_hit(&mut self, bg_pixel: u8) {
+
+        //todo!
+        static PRINTED2: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !PRINTED2.load(std::sync::atomic::Ordering::Relaxed) {
+            PRINTED2.store(true, std::sync::atomic::Ordering::Relaxed);
+            
+            // Posição do sprite: scanline=25, X=88
+            // Tile X = 88 / 8 = 11, Tile Y = 25 / 8 = 3
+            let coarse_x = 11u16;
+            let coarse_y = 3u16;
+            let nt_addr = 0x2000 | (coarse_y << 5) | coarse_x;
+            let tile_id = self.ppubus.read_ppubus(nt_addr);
+            
+            // Lê os 8 rows do pattern desse tile
+            let pattern_base: u16 = if self.ctrl.contains(PpuCtrlFlags::BackGroundPattern) { 0x1000 } else { 0x0000 };
+            println!("Nametable addr={:#06x} tile_id={}", nt_addr, tile_id);
+            for row in 0..8u16 {
+                let lo = self.ppubus.read_ppubus(pattern_base + tile_id as u16 * 16 + row);
+                let hi = self.ppubus.read_ppubus(pattern_base + tile_id as u16 * 16 + row + 8);
+                println!("  row={} lo={:08b} hi={:08b}", row, lo, hi);
+            }
+        }
+
+        if self.status.contains(PpuStatusFlags::Sprite0hit) { return; }
+        if !self.mask.contains(PpuMaskFlags::EnableBackground) { return; }
+        if !self.mask.contains(PpuMaskFlags::EnableSprites) { return; }
+
+        let sprite0_y    = self.oam[0] as u16 + 1; // Y é armazenado -1
+        let sprite0_x    = self.oam[3] as u16;
+        let sprite0_tile = self.oam[1];
+
+        //todo!
+        static PRINTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !PRINTED.load(std::sync::atomic::Ordering::Relaxed) {
+            println!("Sprite0: Y={} X={} tile={} attr={:#010b}",
+                sprite0_y, sprite0_x, self.oam[1], self.oam[2]);
+            println!("mask={:#010b}", self.mask.bits());
+            PRINTED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        let scanline = self.scanline as u16;
+        let cycle    = self.cycle - 1; // cycle 1 = pixel 0
+
+        // sprite está na scanline atual?
+        if scanline < sprite0_y || scanline >= sprite0_y + 8 { return; }
+
+        // cycle está na coluna do sprite?
+        if (cycle as u16) < sprite0_x || (cycle as u16) >= sprite0_x + 8 { return; }
+
+        // verifica se o pixel do sprite 0 é opaco nessa posição
+        let sprite_row = (scanline - sprite0_y) as u8;
+        let sprite_col = (cycle as u16 - sprite0_x) as u8;
+
+        let flip_h = self.oam[2] & 0x40 != 0;
+        let col = if flip_h { 7 - sprite_col } else { sprite_col };
+
+        let sprite_pattern_base: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) { 0x1000 } else { 0x0000 };
+        let addr = sprite_pattern_base + sprite0_tile as u16 * 16 + sprite_row as u16;
+
+        let lo = self.ppubus.read_ppubus(addr);
+        let hi = self.ppubus.read_ppubus(addr + 8);
+
+        let bit = 7 - col;
+        let sp_pixel = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+        
+        if sp_pixel != 0 /*&& bg_pixel != 0 todo! */  {
+            self.status.insert(PpuStatusFlags::Sprite0hit);
         }
     }
 }
