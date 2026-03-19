@@ -24,7 +24,7 @@ enum State {
 }
 
 impl State {
-    fn match_ppu_state(&mut self, scanline: &usize) -> State {
+    fn current_ppu_state(&mut self, scanline: &i16) -> State {
         match scanline {
             0..=239   => Self::Visible,
             240       => Self::PostRender,
@@ -219,7 +219,47 @@ impl PPU {
     }
 
     pub fn tick(&mut self, cycles: u16) -> bool {
+        for _ in 0..cycles {
+            self.clock();
+        }
+        let complete = self.frame_complete;
+        self.frame_complete = false;
+        complete
+    }
+
+    fn clock(&mut self) {
+        self.state = self.state.current_ppu_state(&self.scanline);
+
+        match self.scanline {
+            -1 | 0..=239 => self.render_scanline(),
+            240           => {} // idle
+            241           => {
+                if self.cycle == 1 {
+                    self.status.insert(PpuStatusFlags::VblankFlag);
+                    if self.ctrl.generate_vblank_nmi() {
+                        self.nmi_occurred = true
+                    }
+                }
+            }
+            _             => {} // scanline 241 - 260
+        }
+        self.increase_cycle();
+    }
+
+    fn render_scanline(&mut self) {
         todo!()
+    }
+
+    fn increase_cycle(&mut self) {
+        self.cycle += 1;
+        if self.cycle > 340 {
+            self.cycle = 0;
+            self.scanline += 1;
+            if self.scanline > 241 {
+                self.scanline = -1;
+                self.frame_complete = true;
+            }
+        }
     }
 }
 
@@ -357,7 +397,7 @@ mod read_registers_tests {
 
         ppu.write_registers(0x06, 0x3F);
         ppu.write_registers(0x06, 0x05);
-        
+
         let val = ppu.read_registers(0x07);
         assert_eq!(val, 0x15);
     }
