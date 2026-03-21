@@ -328,7 +328,7 @@ impl PPU {
             let sprite_y = self.oam[oam_idx * 4 ] as i16;
 
             // evaluates if the current scanline is whithin the pos + size of the sprite
-            let diff = self.scanline - sprite_y - 1;
+            let diff = self.scanline - sprite_y;
             if diff >= 0 && diff < 8 {
                 if oam_idx == 0 {
                     self.sprite0_hit_possible = true
@@ -417,9 +417,8 @@ impl PPU {
         for i in 0..self.sprite_count {
             let (sprite_y, tile_id, attr, _) = self.sprite_scanline[i];
             let flip_v = attr & 0x80 != 0;
-
-            // usa i16 para evitar overflow
-            let row = (self.scanline - sprite_y as i16 - 1) as u8;
+            
+            let row = (self.scanline - sprite_y as i16) as u8;
             let row = if flip_v { 7 - row } else { row };
 
             let addr = sprite_pattern_base + tile_id as u16 * 16 + row as u16;
@@ -488,7 +487,7 @@ impl PPU {
 
         // ── sprite 0 hit ─────────────────────────────────────────────
         if self.sprite0_hit_possible && sp_zero_rendered
-        /* && bg_pixel != 0 todo! */  && sp_pixel != 0
+        && sp_pixel != 0
         && self.cycle >= 2 && self.cycle < 256
         && !self.status.contains(PpuStatusFlags::Sprite0hit) {
             self.status.insert(PpuStatusFlags::Sprite0hit);

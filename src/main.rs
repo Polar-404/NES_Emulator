@@ -113,6 +113,7 @@ async fn main() {
             //};
 
             while !emulator.cpu.bus.ppu.frame_complete {
+                //emulator.cpu.log_state(&mut log_file);
                 emulator.cpu.step(|_| {});
             }
         }

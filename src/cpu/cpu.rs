@@ -754,6 +754,56 @@ impl CPU {
         }
     }
 
+    /// function to log the cpu state with the nestest.nes log format
+    #[allow(dead_code)]
+    pub fn log_state(&mut self, file: &mut std::fs::File) {
+        let pc = self.program_counter;
+        let opcode = self.bus.mem_read(pc);
+
+        let b1 = self.bus.mem_read(pc.wrapping_add(1));
+        let b2 = self.bus.mem_read(pc.wrapping_add(2));
+        
+        let bytes_str = match Self::opcode_size(opcode) {
+            1 => format!("{:02X}      ", opcode),
+            2 => format!("{:02X} {:02X}   ", opcode, b1),
+            3 => format!("{:02X} {:02X} {:02X}", opcode, b1, b2),
+            _ => format!("{:02X}      ", opcode),
+        };
+        
+        let line = format!(
+            "{:04X}  {}  {:>31}  A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} CYC:{}\n",
+            pc,
+            bytes_str,
+            " ", //  mnemonic placeholder
+            self.register_a,
+            self.register_x,
+            self.register_y,
+            self.status.bits(),
+            self.stack_pointer,
+            self.cycles
+        );
+        
+        file.write_all(line.as_bytes()).unwrap();
+    }
+
+    fn opcode_size(opcode: u8) -> u8 {
+        match opcode {
+            // tamanho 1
+            0x00 | 0x08 | 0x18 | 0x28 | 0x38 | 0x40 | 0x48 | 0x58 |
+            0x60 | 0x68 | 0x78 | 0x88 | 0x8A | 0x98 | 0x9A | 0xA8 |
+            0xAA | 0xB8 | 0xBA | 0xC8 | 0xCA | 0xD8 | 0xE8 | 0xEA |
+            0xF8 | 0x0A | 0x2A | 0x4A | 0x6A => 1,
+            // tamanho 3
+            0x0D | 0x0E | 0x19 | 0x1D | 0x20 | 0x2C | 0x2D | 0x2E |
+            0x39 | 0x3D | 0x4C | 0x4D | 0x4E | 0x59 | 0x5D | 0x6D |
+            0x6E | 0x79 | 0x7D | 0x8C | 0x8D | 0x8E | 0x99 | 0x9D |
+            0xAC | 0xAD | 0xAE | 0xB9 | 0xBC | 0xBD | 0xBE | 0xCC |
+            0xCD | 0xCE | 0xD9 | 0xDD | 0xEC | 0xED | 0xEE | 0xF9 |
+            0xFD => 3,
+            _ => 2,
+        }
+    }
+
     pub fn step<F>(&mut self, mut callback: F) -> bool 
     where F: FnMut(&mut CPU) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
