@@ -78,8 +78,11 @@ impl Mapper for InesMapper000 {
             0x6000..=0x7FFF => {
                 self.prg_ram[(addr - 0x6000) as usize] = val;
             }
+            0x8000..=0xFFFF => {
+                
+            }
             _ => {
-                println!("Non mapped address write, this might be a bug");
+                println!("Non mapped address write at {:#06x}", addr)
             }
         }
     }
@@ -92,7 +95,7 @@ impl Mapper for InesMapper000 {
     }
     
     fn write_chr(&mut self, _addr: u16, _val: u8) {
-        panic!("Tried to write to CHR ROM on Mapper 000!");
+        
     }
     fn mirroring(&self) -> Mirroring {
         self.mirroring

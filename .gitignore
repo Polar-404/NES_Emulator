@@ -2,3 +2,9 @@ target/
 *.sublime-workspace
 NES_GAMES/
 NES_TEST_ROMS/
+.log/
+nestest_output.log
+profile.json.gz
+nestest.log
+diff_output.txt
+src/nestest_output.log

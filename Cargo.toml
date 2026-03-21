@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+image = "0.25.10"
 lazy_static = "1.4.0"
 macroquad = "0.4.14"
 arboard = "3.4.0"

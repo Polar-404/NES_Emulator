@@ -6,8 +6,6 @@ use std::cell::RefCell;
 pub struct PPUBUS {
     //32 byte pallete [16 for backgroudn 16 for foreground]
     palette_ram: [u8; 0x20],
-    //stores object atributes such as position, orientatiom pallete, etc...
-    oam: [u8; 0xff], //256 bytes(up to 64 sprites
     vram: [u8; 0x0800], 
     pub mapper: Rc<RefCell<Box<dyn Mapper>>>, // 2KB VRAM
 
@@ -17,7 +15,6 @@ impl PPUBUS {
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> PPUBUS {
         PPUBUS {
             palette_ram: [0; 0x20],
-            oam: [0; 0xff],
             vram: [0; 0x0800],
             mapper,
             last_read_palette: 0
@@ -26,11 +23,9 @@ impl PPUBUS {
 
     pub fn write_ppubus(&mut self, addr: u16, data: u8) {
         match addr {
-            //pattern tables(storages the tiles(8x8 pixels blocks))
-            //THE MAJORITY OF THE CHR-ROM(PATTERN TABLES) IS READ-ONLY, 
-            //BUT SOME OF THEM CAN BE WRITTEN, SO IT'S A GOOD PRATICE TO ALLOW IT TO BE POSSIBLE
+
             0..=0x1FFF => {
-                self.mapper.borrow_mut().write(addr, data);
+                self.mapper.borrow_mut().write_chr(addr, data);
             }
             //VRAM (or nametable)
             0x2000..=0x3EFF  => {
@@ -39,9 +34,7 @@ impl PPUBUS {
             0x3F00..=0x3FFF => {
                 //mirroring the last addr of the palletes
                 let mut palette_addr = (addr & 0x1F) as usize;
-                    
-                // espelhamento: endereços de sprites 0x10, 0x14, 0x18, 0x1C 
-                //apontam para os endereços de background 0x00, 0x04, 0x08, 0x0C
+
                 if palette_addr >= 0x10 && palette_addr % 4 == 0 {
                     palette_addr -= 0x10;
                 }
@@ -56,9 +49,7 @@ impl PPUBUS {
     //TODO remover a referencia mutavel e limpar esse codigo depois que funcionar
     pub fn read_ppubus(&mut self, addr: u16) -> u8{
         match addr {
-            //pattern tables(storages the tiles(8x8 pixels blocks))
-            //THE MAJORITY OF THE CHR-ROM(PATTERN TABLES) IS READ-ONLY, 
-            //BUT SOME OF THEM CAN BE WRITTEN, SO IT'S A GOOD PRATICE TO ALLOW IT TO BE POSSIBLE
+
             0..=0x1FFF => {
                 self.mapper.borrow().read_chr(addr)
             }
@@ -70,14 +61,11 @@ impl PPUBUS {
                 //mirroring the last addr of the palletes
                 let mut palette_addr = (addr & 0x1F) as usize;
 
-                //espelhamento de transparência: 0x10, 0x14, 0x18, 0x1C espelham para 0x00, 0x04, 0x08, 0x0C
-                //e os índices 0x04, 0x08, 0x0C espelham para 0x00 na renderização.
                 if palette_addr >= 0x10 && palette_addr % 4 == 0 {
                     palette_addr -= 0x10;
                 }
 
-                self.last_read_palette = self.palette_ram[palette_addr].clone();
-                //println!("{:#X}",self.last_read_palette);
+                self.last_read_palette = self.palette_ram[palette_addr];
                 
                 self.palette_ram[palette_addr]
                 
@@ -89,49 +77,129 @@ impl PPUBUS {
         }
     }
 
-    fn write_vram(&mut self, addr: u16, data: u8) {
-        let mut addr = (addr - 0x2000) & 0x0FFF;
-
+    fn match_mirroring_addr(&self, addr: u16) -> usize {
+        let addr = (addr - 0x2000) & 0x0FFF;
         match self.mapper.borrow().mirroring() {
-            Mirroring::Vertical => {
-                addr &= 0x07FF;
-            }
-            Mirroring::Horizontal => {
-                addr = (addr & 0x03FF) + ((addr & 0x0800) >> 1);
-                
-            }
+            Mirroring::Vertical => (addr & 0x07FF) as usize,
+            Mirroring::Horizontal => ((addr & 0x03FF) + ((addr & 0x0800) >> 1)) as usize,
+
             //TODO didnt implement OneScreen mirroring yet
             #[allow(unreachable_patterns)]
             _ => {
                 //with OneScreen mirroring all the nametables point to the same 1kb space 
-                addr &= 0x03FF;
+                (addr & 0x03FF) as usize
             }
-
         }
-        
-        self.vram[addr as usize] = data;
+    }
+
+    fn write_vram(&mut self, addr: u16, data: u8) {
+        let addr = self.match_mirroring_addr(addr);
+        self.vram[addr] = data;
     }
 
     fn read_vram(&self, addr: u16) -> u8 {
-        let mut addr = (addr - 0x2000) & 0x0FFF;
+        let addr = self.match_mirroring_addr(addr);
+        self.vram[addr]
+    }
+}
 
-        match self.mapper.borrow().mirroring() {
-            Mirroring::Vertical => {
-                addr &= 0x07FF;
-            }
-            Mirroring::Horizontal => {
-                addr = (addr & 0x03FF) + ((addr & 0x0800) >> 1);
-                
-            }
-            //TODO didnt implement OneScreen mirroring yet
-            #[allow(unreachable_patterns)]
-            _ => {
-                //with OneScreen mirroring all the nametables point to the same 1kb space 
-                addr &= 0x03FF;
-            }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::dummy_mapper::TestMapper;
 
+    fn make_bus_horizontal() -> PPUBUS {
+        PPUBUS::new(TestMapper::new(vec![]))
+    }
+
+    fn make_bus_vertical() -> PPUBUS {
+        // TestMapper usa Horizontal por padrão, então precisamos de um mapper customizado
+        // por enquanto vamos testar só o que o TestMapper suporta
+        PPUBUS::new(TestMapper::new(vec![]))
+    }
+
+    // ── Palette RAM ──────────────────────────────────────────────────────
+
+    #[test]
+    fn palette_escrita_e_leitura_basica() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x3F05, 0x2C);
+        assert_eq!(bus.read_ppubus(0x3F05), 0x2C);
+    }
+
+    #[test]
+    fn palette_mirror_dentro_do_range_3f00_3fff() {
+        let mut bus = make_bus_horizontal();
+        // $3F25 deve espelhar $3F05 (0x25 & 0x1F = 0x05)
+        bus.write_ppubus(0x3F05, 0xAA);
+        assert_eq!(bus.read_ppubus(0x3F25), 0xAA);
+    }
+
+    #[test]
+    fn palette_mirror_sprite_para_background_em_multiplos_de_4() {
+        let mut bus = make_bus_horizontal();
+        // $3F10, $3F14, $3F18, $3F1C espelham $3F00, $3F04, $3F08, $3F0C
+        bus.write_ppubus(0x3F10, 0x11);
+        assert_eq!(bus.read_ppubus(0x3F00), 0x11);
+
+        bus.write_ppubus(0x3F14, 0x22);
+        assert_eq!(bus.read_ppubus(0x3F04), 0x22);
+    }
+
+    #[test]
+    fn palette_slots_independentes() {
+        let mut bus = make_bus_horizontal();
+        for i in 0u8..32 {
+            // pula os que espelham ($10, $14, $18, $1C)
+            if i >= 0x10 && i % 4 == 0 { continue; }
+            bus.write_ppubus(0x3F00 + i as u16, i);
         }
-        
-        self.vram[addr as usize]
+        for i in 0u8..32 {
+            if i >= 0x10 && i % 4 == 0 { continue; }
+            assert_eq!(bus.read_ppubus(0x3F00 + i as u16), i);
+        }
+    }
+
+    // ── VRAM — Mirroring horizontal ──────────────────────────────────────
+    // A ($2000) = B ($2400)  →  VRAM baixo
+    // C ($2800) = D ($2C00)  →  VRAM alto
+
+    #[test]
+    fn vram_horizontal_a_espelha_b() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x2000, 0x42);
+        assert_eq!(bus.read_ppubus(0x2400), 0x42);
+    }
+
+    #[test]
+    fn vram_horizontal_b_espelha_a() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x2400, 0x99);
+        assert_eq!(bus.read_ppubus(0x2000), 0x99);
+    }
+
+    #[test]
+    fn vram_horizontal_c_espelha_d() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x2800, 0x77);
+        assert_eq!(bus.read_ppubus(0x2C00), 0x77);
+    }
+
+    #[test]
+    fn vram_horizontal_ab_independente_de_cd() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x2000, 0x11);
+        bus.write_ppubus(0x2800, 0x22);
+        assert_eq!(bus.read_ppubus(0x2000), 0x11);
+        assert_eq!(bus.read_ppubus(0x2800), 0x22);
+    }
+
+    // ── VRAM — mirror de $3000–$3EFF para $2000–$2EFF ───────────────────
+
+    #[test]
+    fn vram_mirror_de_3000_para_2000() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x2005, 0xAB);
+        assert_eq!(bus.read_ppubus(0x3005), 0xAB);
     }
 }
