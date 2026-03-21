@@ -3,10 +3,13 @@ use std::{path::{Path, PathBuf}};
 use macroquad::prelude::*;
 use arboard::Clipboard;
 
-use crate::cpu::cpu::{CPU, CpuFlags};
+use crate::{cpu::cpu::{CPU, CpuFlags}, ppu::registers::PpuCtrlFlags};
 mod cpu;
 mod memory;
 mod ppu;
+
+//use ppu::ppu::PPU;
+//use image::{ImageBuffer, Rgba};
 
 #[macro_use]
 extern crate lazy_static;
@@ -20,14 +23,12 @@ const DEFAULT_GAME_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/NES_GAMES/
 const DEFAULT_GAME_NAME: &str = "Super Mario Bros. (World)";
 
 struct EmulatorInstance {
-    //mapper: Rc<std::cell::RefCell<Box<dyn Mapper + 'static>>>,  ( todo! talvez n seja necessario esse mapper)
     cpu: CPU, 
     image: Image, 
     ppu_texture: Texture2D, 
     show_debug_info: bool, 
     is_paused: bool,
 
-    steps: u32
 } impl EmulatorInstance {
     fn new(game_path: PathBuf) -> EmulatorInstance {
         
@@ -37,7 +38,7 @@ struct EmulatorInstance {
         
         cpu.reset_interrupt();
 
-        //NES TEST FORÇADO
+        //FORCING NESTEST
         //cpu.program_counter = 0xC000; 
         //cpu.status = CpuFlags::from_bits_truncate(0b100100);
         //cpu.stack_pointer = 0xFD; 
@@ -57,7 +58,6 @@ struct EmulatorInstance {
             ppu_texture: ppu_texture, 
             show_debug_info: false, 
             is_paused: false,
-            steps: 0
         }
     }
 }
@@ -91,13 +91,15 @@ async fn main() {
     let mut path_buffer = String::new();
 
     async fn rungame(emulator: &mut EmulatorInstance) {
+
+        let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
         
         if is_key_pressed(KeyCode::Space) {
             emulator.is_paused = !emulator.is_paused;
         }
         if !emulator.is_paused {
             emulator.cpu.bus.ppu.frame_complete = false;
-            let callback_cpu_loop = |cpu: &mut CPU| {
+            //let callback_cpu_loop = |cpu: &mut CPU| {
                 //if cpu.program_counter >= 0x813d && cpu.program_counter <= 0x8145 {
                 //    println!("PC={:#06x} opcode={:#04x} A={:#04x} X={:#04x} Y={:#04x} status={:08b}",
                 //        cpu.program_counter - 1,
@@ -108,17 +110,10 @@ async fn main() {
                 //        cpu.status.bits()
                 //    );
                 //}
-            };
+            //};
 
             while !emulator.cpu.bus.ppu.frame_complete {
                 emulator.cpu.step(|_| {});
-                emulator.steps += 1;
-                if emulator.steps > 10_000_000 {
-                    //println!("STUCK! PC={:#06x} cycles={}", 
-                    //    emulator.cpu.program_counter,
-                    //    emulator.cpu.cycles);
-                    //break;
-                }
             }
         }
 
@@ -142,8 +137,10 @@ async fn main() {
         if is_key_pressed(KeyCode::F1) {
             //TODO ver um jeito de ajustar para escalar a janela para o tamanho certo
             // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
-           emulator.show_debug_info = !emulator.show_debug_info;
+            emulator.show_debug_info = !emulator.show_debug_info;
         }
+
+        draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
     
         if emulator.show_debug_info {
             let pos_x: f32 = 520.0 * MULTIPLY_RESOLUTION as f32; // Posição X para informações de depuração
@@ -177,8 +174,8 @@ async fn main() {
             draw_text(&format!("PPU Cycle: {} | Scanline: {}", emulator.cpu.bus.ppu.cycle, emulator.cpu.bus.ppu.scanline), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("STEPS: {:?}", emulator.steps), pos_x, pos_y, font_size, WHITE);
+            
+        
         }
     }
 

@@ -95,7 +95,7 @@ impl Mapper for InesMapper000 {
     }
     
     fn write_chr(&mut self, _addr: u16, _val: u8) {
-        panic!("Tried to write to CHR ROM on Mapper 000!");
+        
     }
     fn mirroring(&self) -> Mirroring {
         self.mirroring

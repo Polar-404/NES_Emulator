@@ -167,7 +167,16 @@ impl PPU {
     pub fn write_registers(&mut self, addr: u16, val: u8) -> bool {
         match addr & 0x07 {
             0x00 => {
+                let nmi_before = self.ctrl.generate_vblank_nmi();
+                
                 self.ctrl = PpuCtrlFlags::from_bits_truncate(val);
+                
+                let nmi_after = self.ctrl.generate_vblank_nmi();
+                
+                if !nmi_before && nmi_after && self.status.contains(PpuStatusFlags::VblankFlag) {
+                    self.nmi_occurred = true;
+                }
+
                 let base_nametable_address = (val & 0b11) as u16;
                 self.t.addr = (self.t.addr & 0b111_00_11111_11111) | (base_nametable_address << 10)
             }
@@ -209,6 +218,7 @@ impl PPU {
                 }
             }
             0x07 => {
+
                 self.ppubus.write_ppubus(self.v.addr, val);
                 if self.ctrl.contains(PpuCtrlFlags::IncrementVRAM) {
                     self.v.addr = self.v.addr.wrapping_add(32)
@@ -310,7 +320,9 @@ impl PPU {
         if self.cycle == 257 {
             self.load_background_shifters();
             if self.mask.contains(PpuMaskFlags::EnableBackground) {
+                //println!("Transfer X: t={:#06x} → v antes={:#06x}", self.t.addr, self.v.addr);
                 self.v.transfer_address_x(self.t);
+                //println!("  v depois={:#06x} (fine_x={})", self.v.addr, self.fine_x);
             }
         }
         // ── Pre-render: loads Y from t -> v at the cycles: 280-304 ───────
@@ -446,7 +458,7 @@ impl PPU {
         let bit = 7 - col;
         let sp_pixel = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
         
-        if sp_pixel != 0 /*&& bg_pixel != 0 todo! */  {
+        if sp_pixel != 0 && bg_pixel != 0  {
             self.status.insert(PpuStatusFlags::Sprite0hit);
         }
     }

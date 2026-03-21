@@ -25,7 +25,7 @@ impl PPUBUS {
         match addr {
 
             0..=0x1FFF => {
-                self.mapper.borrow_mut().write(addr, data);
+                self.mapper.borrow_mut().write_chr(addr, data);
             }
             //VRAM (or nametable)
             0x2000..=0x3EFF  => {

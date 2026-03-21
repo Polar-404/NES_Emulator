@@ -13,6 +13,8 @@ use std::{collections::HashMap};
 use std::rc::Rc;
 use std::cell::RefCell;
 
+use std::io::Write;
+
 bitflags! {
 
     /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
@@ -416,7 +418,7 @@ impl CPU {
     }
     /// ASL - Arithmetic Shift Left
     fn asl_accumulator(&mut self) -> u8 {
-        if (self.register_a & 0b0000_0001) != 0 {
+        if (self.register_a & 0b1000_0000) != 0 {
             self.status.insert(CpuFlags::CARRY);
         } else {
             self.status.remove(CpuFlags::CARRY);
@@ -603,15 +605,15 @@ impl CPU {
 
     fn branch_if(&mut self, condition: bool) {
         if condition {
-            //deve ser i8 pq o range vai de -127 a 128
-            //de forma que o programa pode tanto pular pra frente quanto pular pra trás
+            self.cycles += 1;
+
             let offset = self.mem_read(self.program_counter) as i8;
-
-            // +1 para que o program conte a partir do proximo comando
-            //(ja que no momento ele esta no endereço de offset)
             let base_addr = self.program_counter.wrapping_add(1);
-
             let new_program_counter = base_addr.wrapping_add(offset as u16);
+
+            if (base_addr & 0xFF00) != (new_program_counter & 0xFF00) {
+                self.cycles += 1;
+            }
 
             self.program_counter = new_program_counter;
         }
@@ -742,7 +744,6 @@ impl CPU {
     /// 
     ///The program counter by default starts at 0xFFFC, and it will read top to down increasing by the number of bytes of the current instruction
     #[allow(dead_code)]
-
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
@@ -821,7 +822,7 @@ impl CPU {
                 self.write_register(&opcode.mode, self.register_y);
             }
             //AND BITWISE
-            0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x31 => {
+            0x21 | 0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x31 => {
                 self.and(&opcode.mode);
             }
 
@@ -968,7 +969,7 @@ impl CPU {
 
             //BRK
             0x00 => return false,
-            _ => todo!()
+            _ => todo!("code: {}", code)
         }
 
         //increments the program counter accordingly to how many cicles the opcode is specified at the hashmap
