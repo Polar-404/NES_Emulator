@@ -15,14 +15,17 @@ use super::{
 const SCREEN_WIDTH: usize = 256;
 const SCREEN_HEIGHT: usize = 240;
 
+
+//todo! maybe get rid of this code or find some way to implement it(in a more optmized way since calling this every single clock of the ppu isnt great)
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum State {
     Visible,
     PostRender,
     VBlank,
     PreRender,
 }
-
+#[allow(dead_code)]
 impl State {
     fn current_ppu_state(&mut self, scanline: &i16) -> State {
         match scanline {
@@ -76,7 +79,16 @@ pub struct PPU {
     bg_shift_hi:      u16,
     bg_attr_shift_lo: u16,
     bg_attr_shift_hi: u16,
+
+    // ── Sprites ──────────────────────────────────────────────────
+    sprite_scanline:        [(u8, u8, u8, u8); 8], // (y, tile_id, atributes, x)
+    sprite_count:           usize,
+    sprite_shifter_lo:      [u8; 8],
+    sprite_shifter_hi:      [u8; 8],
+    sprite0_hit_possible:   bool
 }
+
+
 
 impl PPU {
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
@@ -115,6 +127,12 @@ impl PPU {
             bg_shift_hi:      0,
             bg_attr_shift_lo: 0,
             bg_attr_shift_hi: 0,
+
+            sprite_scanline:    [(0,0,0,0); 8],
+            sprite_count:           0,
+            sprite_shifter_lo:      [0; 8],
+            sprite_shifter_hi:      [0; 8],
+            sprite0_hit_possible: false
             
         }
     }
@@ -239,9 +257,8 @@ impl PPU {
         self.frame_complete
     }
 
+    #[inline(always)]
     fn clock(&mut self) {
-        self.state = self.state.current_ppu_state(&self.scanline);
-
         match self.scanline {
             -1 | 0..=239 => self.render_scanline(),
             240           => {} // idle
@@ -257,7 +274,7 @@ impl PPU {
         }
         self.increase_cycle();
     }
-
+    #[inline]
     fn increase_cycle(&mut self) {
         self.cycle += 1;
         if self.cycle > 340 {
@@ -269,8 +286,13 @@ impl PPU {
             }
         }
     }
-
+    #[inline]
     fn render_scanline(&mut self) {
+        self.render_scanline_background();
+        if self.cycle == 257 && self.scanline >= 0 {
+            self.render_scanline_sprites();
+        }
+
         let is_prerender = self.scanline == -1;
         let is_visible = self.scanline >= 0;
 
@@ -279,7 +301,58 @@ impl PPU {
             self.status.remove(PpuStatusFlags::SpriteOverflow);
             self.status.remove(PpuStatusFlags::Sprite0hit);
         }
-        
+
+        // ── Pre-render: loads Y from t -> v at the cycles: 280-304 ───────
+        if is_prerender 
+        && self.cycle >= 280 
+        && self.cycle <= 304
+        && self.mask.contains(PpuMaskFlags::EnableBackground) {
+            self.v.transfer_address_y(self.t);
+        }
+
+        if is_visible && self.cycle >= 1 && self.cycle <= 256 {
+            self.render_pixel();
+        }
+    }
+    #[inline]
+    fn render_scanline_sprites(&mut self) {
+        self.evaluate_sprites();
+        self.load_sprite_shifters();
+    }
+    #[inline]
+    fn evaluate_sprites(&mut self) {
+        self.clean_previous_scanline_sprite_registers();
+
+        let mut oam_idx = 0;
+        while oam_idx < 64 && self.sprite_count < 8 {
+            let sprite_y = self.oam[oam_idx * 4 ] as i16;
+
+            // evaluates if the current scanline is whithin the pos + size of the sprite
+            let diff = self.scanline - sprite_y - 1;
+            if diff >= 0 && diff < 8 {
+                if oam_idx == 0 {
+                    self.sprite0_hit_possible = true
+                }
+                self.sprite_scanline[self.sprite_count] = (
+                    sprite_y as u8,
+                    self.oam[oam_idx * 4 + 1], // tile id
+                    self.oam[oam_idx * 4 + 2], // atributes
+                    self.oam[oam_idx * 4 + 3], // x cord
+                );
+                self.sprite_count += 1
+            }
+            oam_idx += 1;
+        }
+    }
+    #[inline]
+    fn clean_previous_scanline_sprite_registers(&mut self) {
+        self.sprite_count = 0;
+        self.sprite0_hit_possible = false;
+        self.sprite_shifter_lo = [0; 8];
+        self.sprite_shifter_hi = [0; 8];
+    }
+    #[inline]
+    fn render_scanline_background(&mut self) { 
         let in_fetch_range = (self.cycle >= 1 && self.cycle <= 256)
         || (self.cycle >= 321 && self.cycle <= 336); // fetch tile range (cycles 1-256 and 321-336)
 
@@ -325,19 +398,8 @@ impl PPU {
                 //println!("  v depois={:#06x} (fine_x={})", self.v.addr, self.fine_x);
             }
         }
-        // ── Pre-render: loads Y from t -> v at the cycles: 280-304 ───────
-        if is_prerender 
-        && self.cycle >= 280 
-        && self.cycle <= 304
-        && self.mask.contains(PpuMaskFlags::EnableBackground) {
-            self.v.transfer_address_y(self.t);
-        }
-
-        if is_visible && self.cycle >= 1 && self.cycle <= 256 {
-            self.render_pixel();
-        }
     }
-
+    #[inline]
     fn load_background_shifters(&mut self) {
         self.bg_shift_lo = (self.bg_shift_lo & 0xFF00) | self.bg_next_tile_lo as u16;
         self.bg_shift_hi = (self.bg_shift_hi & 0xFF00) | self.bg_next_tile_hi as u16;
@@ -348,6 +410,24 @@ impl PPU {
             | if self.bg_next_tile_attr & 0x02 != 0 {0xFF} else {0x00};
 
     }
+    #[inline]
+    fn load_sprite_shifters(&mut self) {
+        let sprite_pattern_base: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) {0x1000} else {0x0000};
+
+        for i in 0..self.sprite_count {
+            let (sprite_y, tile_id, attr, _) = self.sprite_scanline[i];
+            let flip_v = attr & 0x80 != 0;
+
+            // usa i16 para evitar overflow
+            let row = (self.scanline - sprite_y as i16 - 1) as u8;
+            let row = if flip_v { 7 - row } else { row };
+
+            let addr = sprite_pattern_base + tile_id as u16 * 16 + row as u16;
+            self.sprite_shifter_lo[i] = self.ppubus.read_ppubus(addr);
+            self.sprite_shifter_hi[i] = self.ppubus.read_ppubus(addr + 8);
+        }
+    }
+    #[inline]
     fn update_shifters(&mut self) {
         if self.mask.contains(PpuMaskFlags::EnableBackground) {
             self.bg_attr_shift_hi   <<= 1;
@@ -356,23 +436,76 @@ impl PPU {
             self.bg_shift_lo        <<= 1;
         }
     }
+    #[inline]
     fn render_pixel(&mut self) {
         let mux: u16 = 0x8000 >> self.fine_x;
 
-        let p0 = ((self.bg_shift_lo & mux) != 0) as u8;
-        let p1 = ((self.bg_shift_hi & mux) != 0) as u8;
-        let pixel = (p1 << 1) | p0;
+        // ── background ───────────────────────────────────────────────
+        let mut bg_pixel = 0u8;
+        let mut bg_palette = 0u8;
+        if self.mask.contains(PpuMaskFlags::EnableBackground) {
+            let p0 = ((self.bg_shift_lo & mux) != 0) as u8;
+            let p1 = ((self.bg_shift_hi & mux) != 0) as u8;
+            bg_pixel = (p1 << 1) | p0;
 
-        let a0 = ((self.bg_attr_shift_lo & mux) != 0) as u8;
-        let a1 = ((self.bg_attr_shift_hi & mux) != 0) as u8;
-        let palette = (a1 << 1) | a0;
+            let a0 = ((self.bg_attr_shift_lo & mux) != 0) as u8;
+            let a1 = ((self.bg_attr_shift_hi & mux) != 0) as u8;
+            bg_palette = (a1 << 1) | a0;
+        }
 
-        self.check_sprite0_hit(pixel);
+        // ── sprites ──────────────────────────────────────────────────
+        let mut sp_pixel = 0u8;
+        let mut sp_palette = 0u8;
+        let mut sp_priority = false;
+        let mut sp_zero_rendered = false;
 
-        let palette_addr = if pixel == 0 {
+        if self.mask.contains(PpuMaskFlags::EnableSprites) {
+            let x = (self.cycle - 1) as u8;
+            for i in 0..self.sprite_count {
+                let sprite_x = self.sprite_scanline[i].3;
+                if x < sprite_x || x >= sprite_x.wrapping_add(8) {
+                    continue;
+                }
+
+                let offset = x - sprite_x;
+                let flip_h = self.sprite_scanline[i].2 & 0x40 != 0;
+                let bit = if flip_h { offset } else { 7 - offset};
+
+                let lo = (self.sprite_shifter_lo[i] >> bit) & 1;
+                let hi = (self.sprite_shifter_hi[i] >> bit) & 1;
+                sp_pixel = (hi << 1) | lo;
+
+                if sp_pixel != 0 {
+                    sp_palette = (self.sprite_scanline[i].2 & 0x03) + 4;
+                    sp_priority = self.sprite_scanline[i].2 & 0x20 == 0;
+                    if i == 0 {
+                        sp_zero_rendered = true
+                    }
+                    break;
+                }
+            }
+        }
+
+        // ── sprite 0 hit ─────────────────────────────────────────────
+        if self.sprite0_hit_possible && sp_zero_rendered
+        /* && bg_pixel != 0 todo! */  && sp_pixel != 0
+        && self.cycle >= 2 && self.cycle < 256
+        && !self.status.contains(PpuStatusFlags::Sprite0hit) {
+            self.status.insert(PpuStatusFlags::Sprite0hit);
+        }
+
+        // ── pixel final ──────────────────────────────────────────────
+        let (final_pixel, final_palette) = match (bg_pixel, sp_pixel) {
+            (0, 0) => (0u8, 0u8),
+            (0, _) => (sp_pixel, sp_palette),
+            (_, 0) => (bg_pixel, bg_palette),
+            _ => if sp_priority {(sp_pixel, sp_palette)} else {(bg_pixel, bg_palette)}
+        };
+
+        let palette_addr = if final_pixel == 0 {
             0x3F00
         } else {
-            0x3F00 | (palette as u16) << 2 | pixel as u16
+            0x3F00 | (final_palette as u16) << 2 | final_pixel as u16
         };
 
         let color_idx = (self.ppubus.read_ppubus(palette_addr) as usize) & 0x3F;
@@ -388,79 +521,9 @@ impl PPU {
         self.frame_buffer[i + 3]    = 255; //RGBA alpha always 255
     }
 
+    #[inline]
     pub fn oam_dma_write(&mut self, data: &[u8; 256]) {
         self.oam.copy_from_slice(data);
-    }
-
-    fn check_sprite0_hit(&mut self, bg_pixel: u8) {
-
-        //todo!
-        static PRINTED2: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !PRINTED2.load(std::sync::atomic::Ordering::Relaxed) {
-            PRINTED2.store(true, std::sync::atomic::Ordering::Relaxed);
-            
-            // Posição do sprite: scanline=25, X=88
-            // Tile X = 88 / 8 = 11, Tile Y = 25 / 8 = 3
-            let coarse_x = 11u16;
-            let coarse_y = 3u16;
-            let nt_addr = 0x2000 | (coarse_y << 5) | coarse_x;
-            let tile_id = self.ppubus.read_ppubus(nt_addr);
-            
-            // Lê os 8 rows do pattern desse tile
-            let pattern_base: u16 = if self.ctrl.contains(PpuCtrlFlags::BackGroundPattern) { 0x1000 } else { 0x0000 };
-            println!("Nametable addr={:#06x} tile_id={}", nt_addr, tile_id);
-            for row in 0..8u16 {
-                let lo = self.ppubus.read_ppubus(pattern_base + tile_id as u16 * 16 + row);
-                let hi = self.ppubus.read_ppubus(pattern_base + tile_id as u16 * 16 + row + 8);
-                println!("  row={} lo={:08b} hi={:08b}", row, lo, hi);
-            }
-        }
-
-        if self.status.contains(PpuStatusFlags::Sprite0hit) { return; }
-        if !self.mask.contains(PpuMaskFlags::EnableBackground) { return; }
-        if !self.mask.contains(PpuMaskFlags::EnableSprites) { return; }
-
-        let sprite0_y    = self.oam[0] as u16 + 1; // Y é armazenado -1
-        let sprite0_x    = self.oam[3] as u16;
-        let sprite0_tile = self.oam[1];
-
-        //todo!
-        static PRINTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if !PRINTED.load(std::sync::atomic::Ordering::Relaxed) {
-            println!("Sprite0: Y={} X={} tile={} attr={:#010b}",
-                sprite0_y, sprite0_x, self.oam[1], self.oam[2]);
-            println!("mask={:#010b}", self.mask.bits());
-            PRINTED.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        let scanline = self.scanline as u16;
-        let cycle    = self.cycle - 1; // cycle 1 = pixel 0
-
-        // sprite está na scanline atual?
-        if scanline < sprite0_y || scanline >= sprite0_y + 8 { return; }
-
-        // cycle está na coluna do sprite?
-        if (cycle as u16) < sprite0_x || (cycle as u16) >= sprite0_x + 8 { return; }
-
-        // verifica se o pixel do sprite 0 é opaco nessa posição
-        let sprite_row = (scanline - sprite0_y) as u8;
-        let sprite_col = (cycle as u16 - sprite0_x) as u8;
-
-        let flip_h = self.oam[2] & 0x40 != 0;
-        let col = if flip_h { 7 - sprite_col } else { sprite_col };
-
-        let sprite_pattern_base: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) { 0x1000 } else { 0x0000 };
-        let addr = sprite_pattern_base + sprite0_tile as u16 * 16 + sprite_row as u16;
-
-        let lo = self.ppubus.read_ppubus(addr);
-        let hi = self.ppubus.read_ppubus(addr + 8);
-
-        let bit = 7 - col;
-        let sp_pixel = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
-        
-        if sp_pixel != 0 && bg_pixel != 0  {
-            self.status.insert(PpuStatusFlags::Sprite0hit);
-        }
     }
 }
 

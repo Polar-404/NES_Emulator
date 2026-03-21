@@ -117,11 +117,10 @@ async fn main() {
             }
         }
 
-        if emulator.cpu.bus.ppu.frame_complete {
-            //at the end of each step, takes the frame buffer and updates the ppu texture with it, therefore rendering a new frame
-            emulator.image.bytes.copy_from_slice(&emulator.cpu.bus.ppu.frame_buffer);
-            emulator.ppu_texture.update(&emulator.image);
-        }
+        //at the end of each step, takes the frame buffer and updates the ppu texture with it, therefore rendering a new frame
+        emulator.image.bytes.copy_from_slice(&emulator.cpu.bus.ppu.frame_buffer);
+        emulator.ppu_texture.update(&emulator.image);
+
 
         draw_texture_ex(
             &emulator.ppu_texture,
@@ -138,6 +137,29 @@ async fn main() {
             //TODO ver um jeito de ajustar para escalar a janela para o tamanho certo
             // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
             emulator.show_debug_info = !emulator.show_debug_info;
+        }
+
+        if is_key_pressed(KeyCode::A) {
+            println!("=== ATTRIBUTE TABLE ===");
+            for row in 0..8u16 {
+                let mut line = String::new();
+                for col in 0..8u16 {
+                    let addr = 0x23C0 + row * 8 + col;
+                    let val = emulator.cpu.bus.ppu.ppubus.read_ppubus(addr);
+                    line.push_str(&format!("{:02X} ", val));
+                }
+                println!("{}", line);
+            }
+        }
+
+        if is_key_pressed(KeyCode::P) {
+            println!("=== PALETTE RAM ===");
+            for i in 0..32u16 {
+                let val = emulator.cpu.bus.ppu.ppubus.read_ppubus(0x3F00 + i);
+                if i % 4 == 0 { print!("\n[{:02X}] ", i); }
+                print!("{:02X} ", val);
+            }
+            println!();
         }
 
         draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);

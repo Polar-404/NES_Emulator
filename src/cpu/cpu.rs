@@ -316,14 +316,14 @@ impl CPU {
         let mut data = self.mem_read(addr);
         let previous_carry = self.status.contains(CpuFlags::CARRY);
 
-        if data & 0b1000_0000 != 0 {
+        if data & 0b0000_0001 != 0 {
             self.status.insert(CpuFlags::CARRY);
         } else {
             self.status.remove(CpuFlags::CARRY);
         }
         data = data >> 1;
         if previous_carry {
-            data = data | 0b0000_0001
+            data = data | 0b1000_0000
         }
         self.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
@@ -333,14 +333,14 @@ impl CPU {
         let mut data = self.register_a;
         let previous_carry = self.status.contains(CpuFlags::CARRY);
 
-        if data & 0b1000_0000 != 0 {
+        if data & 0b0000_0001 != 0 {
             self.status.insert(CpuFlags::CARRY);
         } else {
             self.status.remove(CpuFlags::CARRY);
         }
         data = data >> 1;
         if previous_carry {
-            data = data | 0b0000_0001
+            data = data | 0b1000_0000
         }
         self.register_a = data;
         self.update_zero_and_negative_flags(self.register_a);
@@ -685,9 +685,9 @@ impl CPU {
         let addr = self.get_oprand_adress(mode);
         let val = self.mem_read(addr);
 
-        let sub_carry = if self.status.contains(CpuFlags::CARRY) { 1 } else { 0 };
-
-        let sum = ((self.register_a as u16).wrapping_sub(sub_carry)).wrapping_sub(val as u16);
+        let val_complement = !val;
+        let carry = if self.status.contains(CpuFlags::CARRY) { 1u16 } else { 0u16 };
+        let sum = self.register_a as u16 + val_complement as u16 + carry;
 
         if sum > 0xff { //seta a carry flag
             self.status.insert(CpuFlags::CARRY); 
