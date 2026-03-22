@@ -1,9 +1,9 @@
-use std::{path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
 
 use macroquad::prelude::*;
 use arboard::Clipboard;
 
-use crate::{cpu::cpu::{CPU, CpuFlags}, ppu::registers::PpuCtrlFlags};
+use crate::{cpu::cpu::CPU, memory::joypads::JoyPadButtons};
 mod cpu;
 mod memory;
 mod ppu;
@@ -89,6 +89,9 @@ async fn main() {
     let mut clipboard = Clipboard::new().ok();
     let mut state = EmulatorState::Menu;
     let mut path_buffer = String::new();
+
+    let frame_time = std::time::Duration::from_secs_f64(1.0/60.0);
+    let mut frame_deadline = std::time::Instant::now();
 
     async fn rungame(emulator: &mut EmulatorInstance) {
 
@@ -269,11 +272,44 @@ async fn main() {
                 state = EmulatorState::Running { emulator_instance: emu_instance };
             }
             EmulatorState::Running { ref mut emulator_instance } => {
+
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::A, is_key_down(KeyCode::J) || is_key_down(KeyCode::X) 
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::B, is_key_down(KeyCode::K) || is_key_down(KeyCode::C)
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::SELECT, is_key_down(KeyCode::N) || is_key_down(KeyCode::C)
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::START, is_key_down(KeyCode::M) || is_key_down(KeyCode::V)
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::UP, is_key_down(KeyCode::W) || is_key_down(KeyCode::Up)
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::DOWN, is_key_down(KeyCode::S) || is_key_down(KeyCode::Down)
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::LEFT, is_key_down(KeyCode::A) || is_key_down(KeyCode::Left)
+                );
+                emulator_instance.cpu.bus.joypad_1.set_button(
+                    JoyPadButtons::RIGHT, is_key_down(KeyCode::D) || is_key_down(KeyCode::Right)
+                );
+
                 rungame(emulator_instance).await;
             }
         }
 
-        next_frame().await
+        next_frame().await;
+
+        let now = std::time::Instant::now();
+        if now < frame_deadline {
+            std::thread::sleep(frame_deadline - now);
+        }
+        frame_deadline += frame_time
+
 
     }
 }

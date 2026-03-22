@@ -2,6 +2,7 @@ use core::panic;
 use std::path::Path;
 use crate::memory::mappers::*;
 use crate::ppu::ppu::PPU;
+use crate::memory::joypads::JoyPad;
 
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
@@ -16,6 +17,9 @@ pub struct BUS {
     ///APU and I/O functionality that is normally disabled.
     apu_and_io_functionality: [u8; 0x08], 
 
+    pub joypad_1: JoyPad,
+    pub joypad_2: JoyPad,
+
     ///Unmapped. Available for cartridge use.
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
@@ -29,7 +33,9 @@ impl BUS {
         BUS {
             cpu_memory: [0; 0x0800],
             nes_apu_and_io_registers: [0; 0x18],
-            apu_and_io_functionality: [0; 0x08], 
+            apu_and_io_functionality: [0; 0x08],
+            joypad_1: JoyPad::new(),
+            joypad_2: JoyPad::new(),
             mapper: Rc::clone(&mapper),
             ppu: PPU::new(mapper),
         }
@@ -45,9 +51,15 @@ impl BUS {
                 let addr: u8 = (addr & 0x07) as u8;
                 self.ppu.read_registers(addr)
             }
-            0x4000..=0x4017 => {
+            0x4000..=0x4015 => {
                 let addr = addr - 0x4000;
                 self.nes_apu_and_io_registers[addr as usize]
+            }
+            0x4016 => {
+                self.joypad_1.read()
+            }
+            0x4017 => {
+                self.joypad_2.read()
             }
             0x4018..=0x401F => {
                 let addr = addr - 0x4018;
@@ -88,6 +100,12 @@ impl BUS {
                     }
                     self.ppu.oam_dma_write(&page);
                     return false;
+                }
+
+                if addr == 0x4016 {
+                    self.joypad_1.write(val);
+                    self.joypad_2.write(val);
+                    return false
                 }
                 
                 let addr = addr - 0x4000;
