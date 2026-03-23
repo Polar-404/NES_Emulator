@@ -1,5 +1,3 @@
-use std::fmt::Error;
-
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
 
@@ -45,7 +43,7 @@ impl AudioOutput {
             return None
         };
         if let Err(e) = stream.play() {
-            eprintln!("[WARNING]: Error while trying to play audio stream. The emulator will play without audio.");
+            eprintln!("[WARNING]: Error while trying to play audio stream. The emulator will play without audio. {:?}", e);
             return None
         }
 

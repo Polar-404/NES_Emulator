@@ -1,51 +1,93 @@
-use crate::apu::square::SquareWave;
-
-use super::{square};
+use super::{square::SquareWave, triangle::TriangleWave};
 
 /// NES Audio Processing Unit
 /// 
 /// for more info:
 /// https://www.nesdev.org/wiki/APU
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct APU {
-    pulse1: SquareWave,
-    pulse2: SquareWave,
+    clock: u64,
+    pub volume: f32,
+    pub pulse1: SquareWave,
+    pub pulse2: SquareWave,
+    pub triangle: TriangleWave
+}
+impl Default for APU {
+    fn default() -> Self {
+        Self {
+            clock: 0,
+            volume: 1.0,
+            pulse1: SquareWave::default(),
+            pulse2: SquareWave::default(),
+            triangle: TriangleWave::default(),
+        }
+    }
 }
 impl APU {
-    pub fn new() -> Self {
-        Self::default()
-    }
     pub fn write_register(&mut self, addr: u16, data: u8) {
         match addr {
             //pulse 1
             0x4000 => self.pulse1.write_control(data),
-            0x4001 => {/* https://www.nesdev.org/wiki/APU_Sweep */},
+            0x4001 => {/* https://www.nesdev.org/wiki/APU_Sweep todo! */},
             0x4002 => self.pulse1.write_timer_lo(data),
             0x4003 => self.pulse1.write_timer_hi(data),
+            
+            0x4004 => self.pulse2.write_control(data),
+            0x4005 => {/* https://www.nesdev.org/wiki/APU_Sweep todo! */},
+            0x4006 => self.pulse2.write_timer_lo(data),
+            0x4007 => self.pulse2.write_timer_hi(data),
 
-            0x4004 => self.pulse1.write_control(data),
-            0x4005 => {/* https://www.nesdev.org/wiki/APU_Sweep */},
-            0x4006 => self.pulse1.write_timer_lo(data),
-            0x4007 => self.pulse1.write_timer_hi(data),
+            0x4008 => self.triangle.write_linear_counter(data), // linear counter control (C), linear counter load (CRRR RRRR)
+            0x4009 => {/* unused */}
+            0x400A => self.triangle.write_timer_lo(data), //timer low 	TTTT TTTT
+            0x400B => self.triangle.write_timer_hi(data), // LLLL LTTT	Length counter load (L), timer high (T), set linear counter reload flag
 
             0x4015 => {
-                self.pulse1.enabled = data & 0x01 != 0;
-                self.pulse2.enabled = data & 0x02 != 0;
+                self.pulse1.enabled     = data & 0x01 != 0;
+                self.pulse2.enabled     = data & 0x02 != 0;
+                self.triangle.enabled   = data & 0x04 != 0;
             }
+
+            0x4017 => {} //unmute immediately
             _ => {}
         }
     }
 
     pub fn step(&mut self) {
-        self.pulse1.step();
-        self.pulse2.step();
+        self.clock += 1;
+
+        if self.clock % 2 == 0 {
+            self.pulse1.step();
+            self.pulse2.step();
+        }
+
+        self.triangle.step();
+    }
+    pub fn clock_frame(&mut self) {
+        self.pulse1.clock_length_and_envelope();
+        self.pulse2.clock_length_and_envelope();
+        self.triangle.clock_length_and_linear();
     }
 
     pub fn get_sample(&mut self) -> f32 {
         let p1 = self.pulse1.get_amplitude();
         let p2 = self.pulse2.get_amplitude();
+        let tg = self.triangle.get_amplitude();
 
-        (p1 + p2) * 0.5
+        let pulse_out = if p1 + p2 > 0.0 {
+            95.88 / ((8128.0 / (p1 + p2)) + 100.0)
+        } else {
+            0.0
+        };
+
+        let tnd_out = if tg > 0.0 {
+            159.79 / ((1.0 / (tg / 8227.0)) + 100.0)
+        } else {
+            0.0
+        };
+
+        let mixed = (pulse_out + tnd_out) * self.volume;
+        mixed
     }
 
     pub fn read_status(&self) -> u8 {

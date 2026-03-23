@@ -749,7 +749,7 @@ impl CPU {
     }
     
     pub fn run_with_callback<F>(&mut self, mut callback: F) where F: FnMut(&mut CPU) {
-        while self.step(&mut callback) {
+        while self.step(&mut callback).0 {
             //no need to do anything but maybe some callback or anything useful could be placed here
         }
     }
@@ -804,7 +804,7 @@ impl CPU {
         }
     }
 
-    pub fn step<F>(&mut self, mut callback: F) -> bool 
+    pub fn step<F>(&mut self, mut callback: F) -> (bool, u8) 
     where F: FnMut(&mut CPU) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
@@ -823,6 +823,7 @@ impl CPU {
         let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido no endereço {:04X}", code, self.program_counter - 1));
 
         self.cycles += opcode.cycles as u64;
+        
         if self.bus.tick(opcode.cycles) {
             self.vblank = true;
         }
@@ -1018,7 +1019,7 @@ impl CPU {
             }
 
             //BRK
-            0x00 => return false,
+            0x00 => return (false, 7),
             _ => todo!("code: {}", code)
         }
 
@@ -1026,7 +1027,7 @@ impl CPU {
         if program_counter_state == self.program_counter {
             self.program_counter += (opcode.len -1) as u16;
         }
-        true
+        (true, opcode.cycles)
     }
 
     pub fn format_cpu_status(status: u8) -> String {

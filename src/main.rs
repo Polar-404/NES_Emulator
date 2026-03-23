@@ -69,14 +69,19 @@ struct EmulatorInstance {
             show_debug_info: false, 
             is_paused: false,
             cycles_since_sample: 0.0,
-            
         }
     }
+
+    #[inline]
     fn step(&mut self, audio: &mut Option<(AudioOutput, u32)>) {
-        self.cpu.step(|_| {});
+        
+        let opcode_cycles = self.cpu.step(|_| {}).1;
+
         if let Some(ref mut audio) = audio {
-            self.cycles_since_sample += 1.0;
+            self.cycles_since_sample += opcode_cycles as f64;
+
             let cycles_per_sample = CPU_FREQ / audio.1 as f64;
+
             if self.cycles_since_sample >= cycles_per_sample {
                 self.cycles_since_sample -= cycles_per_sample;
                 let sample = self.cpu.bus.apu.get_sample();
@@ -84,6 +89,7 @@ struct EmulatorInstance {
             }
         }
     }
+    
 }
 enum EmulatorState {
     Menu,
@@ -196,8 +202,12 @@ async fn main() {
             draw_text(&format!("PPU Cycle: {} | Scanline: {}", emulator.cpu.bus.ppu.cycle, emulator.cpu.bus.ppu.scanline), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
             draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
-            
-        
+
+            println!("Pulse1: [ {:?} ], Pulse2: [ {:?} ] Triangle: [ {:?} ]", 
+            emulator.cpu.bus.apu.pulse1.get_amplitude(), 
+            emulator.cpu.bus.apu.pulse2.get_amplitude(),
+            emulator.cpu.bus.apu.triangle.get_amplitude()
+        );
         }
     }
 

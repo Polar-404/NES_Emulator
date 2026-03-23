@@ -40,7 +40,7 @@ impl BUS {
             joypad_2: JoyPad::new(),
             mapper: Rc::clone(&mapper),
             ppu: PPU::new(mapper),
-            apu: APU::new(),
+            apu: APU::default(),
         }
     }
     
@@ -143,7 +143,9 @@ impl BUS {
 
     pub fn tick(&mut self, cycles: u8) -> bool {
         self.ppu.tick(cycles as u16 * 3);
-        self.apu.step();
+        for _ in 0..cycles {
+            self.apu.step();
+        }
 
         if self.ppu.nmi_occurred {
             self.ppu.nmi_occurred = false;
