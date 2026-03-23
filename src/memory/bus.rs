@@ -1,5 +1,6 @@
 use core::panic;
 use std::path::Path;
+use crate::apu::apu::APU;
 use crate::memory::mappers::*;
 use crate::ppu::ppu::PPU;
 use crate::memory::joypads::JoyPad;
@@ -25,6 +26,7 @@ pub struct BUS {
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
     mapper: Rc<RefCell<Box<dyn Mapper>>>,
     pub ppu: PPU,
+    pub apu: APU,
 }
 
 impl BUS {
@@ -38,6 +40,7 @@ impl BUS {
             joypad_2: JoyPad::new(),
             mapper: Rc::clone(&mapper),
             ppu: PPU::new(mapper),
+            apu: APU::new(),
         }
     }
     
@@ -51,10 +54,10 @@ impl BUS {
                 let addr: u8 = (addr & 0x07) as u8;
                 self.ppu.read_registers(addr)
             }
-            0x4000..=0x4015 => {
-                let addr = addr - 0x4000;
-                self.nes_apu_and_io_registers[addr as usize]
+            0x4000..=0x4014 => {
+                0
             }
+            0x4015 => self.apu.read_status(),
             0x4016 => {
                 self.joypad_1.read()
             }
@@ -108,8 +111,7 @@ impl BUS {
                     return false
                 }
                 
-                let addr = addr - 0x4000;
-                self.nes_apu_and_io_registers[addr as usize] = val;
+                self.apu.write_register(addr, val);
                 false
             }
             0x4018..=0x401F => {
@@ -141,6 +143,7 @@ impl BUS {
 
     pub fn tick(&mut self, cycles: u8) -> bool {
         self.ppu.tick(cycles as u16 * 3);
+        self.apu.step();
 
         if self.ppu.nmi_occurred {
             self.ppu.nmi_occurred = false;

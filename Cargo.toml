@@ -8,6 +8,15 @@ image = "0.25.10"
 lazy_static = "1.4.0"
 macroquad = "0.4.14"
 arboard = "3.4.0"
+cpal = "0.15"
+ringbuf = "0.4.8"
 
 [dependencies.bitflags]
 version = "2.9.1"
+
+[profile.dev]
+opt-level = 1 #so it runs at 60fps on debug mode
+debug-assertions = true 
+
+[profile.release]
+lto = "fat"

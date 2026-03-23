@@ -1,12 +1,19 @@
 use std::path::{Path, PathBuf};
 
-use macroquad::prelude::*;
+use macroquad::{audio, prelude::*};
 use arboard::Clipboard;
+use ringbuf::traits::Producer as _;
 
-use crate::{cpu::cpu::CPU, memory::joypads::JoyPadButtons};
+use crate::{
+    cpu::cpu::CPU, 
+    memory::joypads::JoyPadButtons,
+    apu::audio::AudioOutput,
+};
+
 mod cpu;
 mod memory;
 mod ppu;
+mod apu;
 
 //use ppu::ppu::PPU;
 //use image::{ImageBuffer, Rgba};
@@ -22,12 +29,15 @@ const MULTIPLY_RESOLUTION: i32 = 2;
 const DEFAULT_GAME_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/NES_GAMES/Mario/Super Mario Bros. (World).nes");
 const DEFAULT_GAME_NAME: &str = "Super Mario Bros. (World)";
 
+const CPU_FREQ: f64 = 1_789_773.0;
+
 struct EmulatorInstance {
     cpu: CPU, 
     image: Image, 
     ppu_texture: Texture2D, 
     show_debug_info: bool, 
     is_paused: bool,
+    cycles_since_sample: f64
 
 } impl EmulatorInstance {
     fn new(game_path: PathBuf) -> EmulatorInstance {
@@ -58,6 +68,20 @@ struct EmulatorInstance {
             ppu_texture: ppu_texture, 
             show_debug_info: false, 
             is_paused: false,
+            cycles_since_sample: 0.0,
+            
+        }
+    }
+    fn step(&mut self, audio: &mut Option<(AudioOutput, u32)>) {
+        self.cpu.step(|_| {});
+        if let Some(ref mut audio) = audio {
+            self.cycles_since_sample += 1.0;
+            let cycles_per_sample = CPU_FREQ / audio.1 as f64;
+            if self.cycles_since_sample >= cycles_per_sample {
+                self.cycles_since_sample -= cycles_per_sample;
+                let sample = self.cpu.bus.apu.get_sample();
+                let _ = audio.0.producer.try_push(sample);
+            }
         }
     }
 }
@@ -68,7 +92,7 @@ enum EmulatorState {
 
     Loading { game_path: PathBuf },
 
-    Running { emulator_instance: EmulatorInstance }
+    Running { emulator_instance: EmulatorInstance, audio: Option<(AudioOutput, u32)> }
 }
 
 fn window_conf() -> Conf {
@@ -93,31 +117,26 @@ async fn main() {
     let frame_time = std::time::Duration::from_secs_f64(1.0/60.0);
     let mut frame_deadline = std::time::Instant::now();
 
-    async fn rungame(emulator: &mut EmulatorInstance) {
+    async fn rungame(emulator: &mut EmulatorInstance, audio: &mut Option<(AudioOutput, u32)>) {
 
         let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
+        let mut cycles_since_sample: f64 = 0.0;
+
+        let mut sample_count = 0;
+        let mut sample_sum = 0.0;
         
         if is_key_pressed(KeyCode::Space) {
             emulator.is_paused = !emulator.is_paused;
         }
         if !emulator.is_paused {
             emulator.cpu.bus.ppu.frame_complete = false;
-            //let callback_cpu_loop = |cpu: &mut CPU| {
-                //if cpu.program_counter >= 0x813d && cpu.program_counter <= 0x8145 {
-                //    println!("PC={:#06x} opcode={:#04x} A={:#04x} X={:#04x} Y={:#04x} status={:08b}",
-                //        cpu.program_counter - 1,
-                //        cpu.mem_read(cpu.program_counter),
-                //        cpu.register_a,
-                //        cpu.register_x,
-                //        cpu.register_y,
-                //        cpu.status.bits()
-                //    );
-                //}
-            //};
-
+            let sample = emulator.cpu.bus.apu.get_sample();
+            if sample != 0.0 {
+                //println!("Opa, tem som saindo da APU: {}", sample);
+            }
             while !emulator.cpu.bus.ppu.frame_complete {
                 //emulator.cpu.log_state(&mut log_file);
-                emulator.cpu.step(|_| {});
+                emulator.step(audio);
             }
         }
 
@@ -141,29 +160,6 @@ async fn main() {
             //TODO ver um jeito de ajustar para escalar a janela para o tamanho certo
             // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
             emulator.show_debug_info = !emulator.show_debug_info;
-        }
-
-        if is_key_pressed(KeyCode::A) {
-            println!("=== ATTRIBUTE TABLE ===");
-            for row in 0..8u16 {
-                let mut line = String::new();
-                for col in 0..8u16 {
-                    let addr = 0x23C0 + row * 8 + col;
-                    let val = emulator.cpu.bus.ppu.ppubus.read_ppubus(addr);
-                    line.push_str(&format!("{:02X} ", val));
-                }
-                println!("{}", line);
-            }
-        }
-
-        if is_key_pressed(KeyCode::P) {
-            println!("=== PALETTE RAM ===");
-            for i in 0..32u16 {
-                let val = emulator.cpu.bus.ppu.ppubus.read_ppubus(0x3F00 + i);
-                if i % 4 == 0 { print!("\n[{:02X}] ", i); }
-                print!("{:02X} ", val);
-            }
-            println!();
         }
 
         draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
@@ -265,13 +261,14 @@ async fn main() {
                 draw_text("CARREGANDO...", 200.0, 200.0, 50.0, YELLOW);
                 
                 let emu_instance = EmulatorInstance::new(game_path.to_path_buf());
+                let audio = AudioOutput::new(44100);
 
                 //print_program(&emu_instance);
                 println!("tipo de mirroring: {:?}", emu_instance.cpu.bus.ppu.ppubus.mapper.borrow().mirroring());
                 
-                state = EmulatorState::Running { emulator_instance: emu_instance };
+                state = EmulatorState::Running { emulator_instance: emu_instance, audio };
             }
-            EmulatorState::Running { ref mut emulator_instance } => {
+            EmulatorState::Running { ref mut emulator_instance, ref mut audio } => {
 
                 emulator_instance.cpu.bus.joypad_1.set_button(
                     JoyPadButtons::A, is_key_down(KeyCode::J) || is_key_down(KeyCode::X) 
@@ -298,7 +295,12 @@ async fn main() {
                     JoyPadButtons::RIGHT, is_key_down(KeyCode::D) || is_key_down(KeyCode::Right)
                 );
 
-                rungame(emulator_instance).await;
+                rungame(emulator_instance, audio).await;
+
+                //cant change state beffore droping borrow, so it must be after rungame
+                if is_key_pressed(KeyCode::Escape) {
+                    state = EmulatorState::Menu;
+                }
             }
         }
 
@@ -313,21 +315,3 @@ async fn main() {
 
     }
 }
-
-fn print_program(emulator: &EmulatorInstance) {
-    for addr in (0x0000..=0x1FFF).step_by(16) {
-        print!("{:04X}: ", addr);
-        for offset in 0..16 {
-            let byte = emulator.cpu.bus.ppu.ppubus.mapper.borrow().read_chr(addr + offset);
-            print!("{:02X} ", byte);
-        }
-        println!();
-    }
-}
-
-//fn write_execution_trace(target_start_cycle: i32, target_end_cycle: i32) -> Result<(), String> {
-//    if target_start_cycle >= target_end_cycle {
-//        return Err(String::from("Não é possível dividir por zero!"));
-//    }
-//    Ok(())
-//}
