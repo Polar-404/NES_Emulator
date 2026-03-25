@@ -1,4 +1,4 @@
-use super::{square::SquareWave, triangle::TriangleWave};
+use super::{square::SquareWave, triangle::TriangleWave, noise::Noise};
 
 /// NES Audio Processing Unit
 /// 
@@ -12,7 +12,8 @@ pub struct APU {
     pub volume: f32,
     pub pulse1: SquareWave,
     pub pulse2: SquareWave,
-    pub triangle: TriangleWave
+    pub triangle: TriangleWave,
+    pub noise: Noise
 }
 impl Default for APU {
     fn default() -> Self {
@@ -24,6 +25,7 @@ impl Default for APU {
             pulse1: SquareWave::new(true),
             pulse2: SquareWave::new(false),
             triangle: TriangleWave::default(),
+            noise: Noise::new(),
         }
     }
 }
@@ -45,6 +47,11 @@ impl APU {
             0x4009 => {/* unused */}
             0x400A => self.triangle.write_timer_lo(data), //timer low 	TTTT TTTT
             0x400B => self.triangle.write_timer_hi(data), // LLLL LTTT	Length counter load (L), timer high (T), set linear counter reload flag
+
+            0x400C => self.noise.write_halt_and_volume(data),
+            0x400D => {/* unused */}
+            0x400E => self.noise.write_noise(data),
+            0x400F => self.noise.write_length_counter(data),
 
             0x4015 => {
                 self.pulse1.enabled     = data & 0x01 != 0;
@@ -68,19 +75,25 @@ impl APU {
             self.pulse1.clock_envelope();
             self.pulse2.clock_envelope();
             self.triangle.clock_linear_counter();
+            self.noise.clock_envelope();
 
             if self.frame_sequence % 2 == 0 {
                 self.pulse1.clock_length();
                 self.pulse1.clock_sweep();
+
                 self.pulse2.clock_length();
                 self.pulse2.clock_sweep();
+
                 self.triangle.clock_length();
+
+                self.noise.clock_length();
             }
         }
 
         if self.clock % 2 == 0 {
             self.pulse1.step();
             self.pulse2.step();
+            self.noise.step();
         }
 
         self.triangle.step();
@@ -90,6 +103,7 @@ impl APU {
         let p1 = self.pulse1.get_amplitude();
         let p2 = self.pulse2.get_amplitude();
         let tg = self.triangle.get_amplitude();
+        let ns = self.noise.get_amplitude();
 
         let pulse_out = if p1 + p2 > 0.0 {
             95.88 / ((8128.0 / (p1 + p2)) + 100.0)
@@ -97,8 +111,8 @@ impl APU {
             0.0
         };
 
-        let tnd_out = if tg > 0.0 {
-            159.79 / ((1.0 / (tg / 8227.0)) + 100.0)
+        let tnd_out = if tg + ns > 0.0 {
+            159.79 / ((1.0 / ((tg / 8227.0) + (ns / 12241.0))) + 100.0)
         } else {
             0.0
         };
