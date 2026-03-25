@@ -7,6 +7,8 @@ use super::{square::SquareWave, triangle::TriangleWave};
 #[derive(Debug)]
 pub struct APU {
     clock: u64,
+    frame_counter: usize,
+    frame_sequence: u8,
     pub volume: f32,
     pub pulse1: SquareWave,
     pub pulse2: SquareWave,
@@ -16,9 +18,11 @@ impl Default for APU {
     fn default() -> Self {
         Self {
             clock: 0,
+            frame_counter: 0,
+            frame_sequence: 0,
             volume: 1.0,
-            pulse1: SquareWave::default(),
-            pulse2: SquareWave::default(),
+            pulse1: SquareWave::new(true),
+            pulse2: SquareWave::new(false),
             triangle: TriangleWave::default(),
         }
     }
@@ -28,12 +32,12 @@ impl APU {
         match addr {
             //pulse 1
             0x4000 => self.pulse1.write_control(data),
-            0x4001 => {/* https://www.nesdev.org/wiki/APU_Sweep todo! */},
+            0x4001 => self.pulse1.write_sweep(data),
             0x4002 => self.pulse1.write_timer_lo(data),
             0x4003 => self.pulse1.write_timer_hi(data),
             
             0x4004 => self.pulse2.write_control(data),
-            0x4005 => {/* https://www.nesdev.org/wiki/APU_Sweep todo! */},
+            0x4005 => self.pulse2.write_sweep(data),
             0x4006 => self.pulse2.write_timer_lo(data),
             0x4007 => self.pulse2.write_timer_hi(data),
 
@@ -55,6 +59,24 @@ impl APU {
 
     pub fn step(&mut self) {
         self.clock += 1;
+        self.frame_counter += 1;
+
+        if self.frame_counter >= 7457 { // cpu cycles per sec divided by 240Hz
+            self.frame_counter -= 7457;
+            self.frame_sequence = (self.frame_sequence + 1) % 4;
+
+            self.pulse1.clock_envelope();
+            self.pulse2.clock_envelope();
+            self.triangle.clock_linear_counter();
+
+            if self.frame_sequence % 2 == 0 {
+                self.pulse1.clock_length();
+                self.pulse1.clock_sweep();
+                self.pulse2.clock_length();
+                self.pulse2.clock_sweep();
+                self.triangle.clock_length();
+            }
+        }
 
         if self.clock % 2 == 0 {
             self.pulse1.step();
@@ -62,11 +84,6 @@ impl APU {
         }
 
         self.triangle.step();
-    }
-    pub fn clock_frame(&mut self) {
-        self.pulse1.clock_length_and_envelope();
-        self.pulse2.clock_length_and_envelope();
-        self.triangle.clock_length_and_linear();
     }
 
     pub fn get_sample(&mut self) -> f32 {

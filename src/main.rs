@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use macroquad::{audio, prelude::*};
+use macroquad::prelude::*;
 use arboard::Clipboard;
-use ringbuf::traits::Producer as _;
+use ringbuf::traits::{Observer as _, Producer as _};
 
 use crate::{
     cpu::cpu::CPU, 
@@ -14,9 +14,6 @@ mod cpu;
 mod memory;
 mod ppu;
 mod apu;
-
-//use ppu::ppu::PPU;
-//use image::{ImageBuffer, Rgba};
 
 #[macro_use]
 extern crate lazy_static;
@@ -74,13 +71,25 @@ struct EmulatorInstance {
 
     #[inline]
     fn step(&mut self, audio: &mut Option<(AudioOutput, u32)>) {
-        
+
         let opcode_cycles = self.cpu.step(|_| {}).1;
 
         if let Some(ref mut audio) = audio {
             self.cycles_since_sample += opcode_cycles as f64;
 
-            let cycles_per_sample = CPU_FREQ / audio.1 as f64;
+            let capacity = audio.0.producer.capacity().get() as f64;
+            let len = audio.0.producer.occupied_len() as f64;
+            let fullness = len / capacity; // goes from 0.0 (empty) up to 1.0 (full)
+
+            let rate_adjustment = if fullness < 0.4 {
+                0.98
+            } else if fullness > 0.6 {
+                1.02
+            } else {
+                1.0 
+            };
+
+            let cycles_per_sample = (CPU_FREQ / audio.1 as f64) * rate_adjustment;
 
             if self.cycles_since_sample >= cycles_per_sample {
                 self.cycles_since_sample -= cycles_per_sample;
@@ -176,6 +185,10 @@ async fn main() {
             let line_height = 30.0; // Altura da linha para espaçamento
             let font_size = 30.0; // Tamanho da fonte
 
+            //volume: 
+            draw_text(&format!("Vol: {:.0}%", emulator.cpu.bus.apu.volume * 100.0), pos_x, pos_y, font_size, WHITE);
+            pos_y += line_height * 2.0;
+
             // cpu info
             draw_text(&format!("STATUS: {}", CPU::format_cpu_status(emulator.cpu.status.bits())), pos_x, pos_y, font_size, WHITE);
             pos_y += line_height;
@@ -203,11 +216,6 @@ async fn main() {
             pos_y += line_height;
             draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
 
-            println!("Pulse1: [ {:?} ], Pulse2: [ {:?} ] Triangle: [ {:?} ]", 
-            emulator.cpu.bus.apu.pulse1.get_amplitude(), 
-            emulator.cpu.bus.apu.pulse2.get_amplitude(),
-            emulator.cpu.bus.apu.triangle.get_amplitude()
-        );
         }
     }
 
@@ -304,6 +312,13 @@ async fn main() {
                 emulator_instance.cpu.bus.joypad_1.set_button(
                     JoyPadButtons::RIGHT, is_key_down(KeyCode::D) || is_key_down(KeyCode::Right)
                 );
+
+                if is_key_pressed(KeyCode::Equal) || is_key_pressed(KeyCode::KpAdd) {
+                    emulator_instance.cpu.bus.apu.volume = (emulator_instance.cpu.bus.apu.volume + 0.1).min(2.0);
+                }
+                if is_key_pressed(KeyCode::Minus) || is_key_pressed(KeyCode::KpSubtract) {
+                    emulator_instance.cpu.bus.apu.volume = (emulator_instance.cpu.bus.apu.volume - 0.1).max(0.0);
+                }
 
                 rungame(emulator_instance, audio).await;
 

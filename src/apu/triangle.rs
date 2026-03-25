@@ -15,7 +15,7 @@ pub struct TriangleWave {
     sequence_pos: u8,
     linear_halt: bool,
     linear_reload_flag: bool,
-    lenght_counter: u8,
+    length_counter: u8,
 }
 
 impl TriangleWave {
@@ -29,7 +29,7 @@ impl TriangleWave {
             }
         }
 
-        if self.linear_counter == 0 || self.lenght_counter == 0 { return }
+        if self.linear_counter == 0 || self.length_counter == 0 { return }
 
         if self.timer_value == 0 {
             self.timer_value = self.timer_reload + 1;
@@ -40,13 +40,28 @@ impl TriangleWave {
     }
     
     pub fn get_amplitude(&mut self) -> f32 {
-        if self.lenght_counter == 0 || self.linear_counter == 0 || !self.enabled { return 0.0 }
+        if self.length_counter == 0 || self.linear_counter == 0 || !self.enabled { return 0.0 }
         let sample = TRIANGLE_SEQUENCE[self.sequence_pos as usize];
         sample
     }
-    pub fn clock_length_and_linear(&mut self) {
-        if !self.linear_halt && self.lenght_counter > 0 {
-            self.lenght_counter -= 1;
+
+    //240Hz (quarter frame)
+    pub fn clock_linear_counter(&mut self) {
+        if self.linear_reload_flag {
+            self.linear_counter = self.counter_reload;
+        } else if self.linear_counter > 0 {
+            self.linear_counter -= 1;
+        }
+        
+        if !self.linear_halt {
+            self.linear_reload_flag = false;
+        }
+    }
+
+    // 120Hz (half Frame)
+    pub fn clock_length(&mut self) {
+        if !self.linear_halt && self.length_counter > 0 {
+            self.length_counter -= 1;
         }
     }
     ///CRRR RRRR (C == Halt)
@@ -60,6 +75,6 @@ impl TriangleWave {
     pub fn write_timer_hi(&mut self, data: u8) {
         self.timer_reload = (self.timer_reload & 0x00FF) | (data as u16 & 0b111) << 8;
         self.linear_reload_flag = true;
-        self.lenght_counter = super::square::LENGTH_TABLE[(data >> 3) as usize];
+        self.length_counter = super::square::LENGTH_TABLE[(data >> 3) as usize];
     }
 }
