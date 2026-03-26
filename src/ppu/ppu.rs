@@ -274,7 +274,7 @@ impl PPU {
         }
         self.increase_cycle();
     }
-    #[inline]
+    #[inline(always)]
     fn increase_cycle(&mut self) {
         self.cycle += 1;
         if self.cycle > 340 {
@@ -328,8 +328,10 @@ impl PPU {
             let sprite_y = self.oam[oam_idx * 4 ] as i16;
 
             // evaluates if the current scanline is whithin the pos + size of the sprite
+            let sprite_height = if self.ctrl.contains(PpuCtrlFlags::SpriteSize) { 16 } else { 8 };
             let diff = self.scanline - sprite_y;
-            if diff >= 0 && diff < 8 {
+
+            if diff >= 0 && diff < sprite_height {
                 if oam_idx == 0 {
                     self.sprite0_hit_possible = true
                 }
@@ -412,16 +414,33 @@ impl PPU {
     }
     #[inline]
     fn load_sprite_shifters(&mut self) {
-        let sprite_pattern_base: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) {0x1000} else {0x0000};
+        let sprite_size_16 = self.ctrl.contains(PpuCtrlFlags::SpriteSize);
 
         for i in 0..self.sprite_count {
             let (sprite_y, tile_id, attr, _) = self.sprite_scanline[i];
             let flip_v = attr & 0x80 != 0;
             
             let row = (self.scanline - sprite_y as i16) as u8;
-            let row = if flip_v { 7 - row } else { row };
+            let (pattern_base, tile, tile_row) = if sprite_size_16 {
+            
+            let bank: u16 = if tile_id & 1 != 0 { 0x1000 } else { 0x0000 };
+            let base_tile = (tile_id & 0xFE) as u16;
+            if row < 8 {
 
-            let addr = sprite_pattern_base + tile_id as u16 * 16 + row as u16;
+            let r = if flip_v { 7 - row } else { row };
+                    (bank, base_tile, r)
+                } else {
+
+                    let r = if flip_v { 7 - (row - 8) } else { row - 8 };
+                    (bank, base_tile + 1, r)
+                }
+            } else {
+                let bank: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) { 0x1000 } else { 0x0000 };
+                let r = if flip_v { 7 - row } else { row };
+                (bank, tile_id as u16, r)
+            };
+
+            let addr = pattern_base + tile * 16 + tile_row as u16;
             self.sprite_shifter_lo[i] = self.ppubus.read_ppubus(addr);
             self.sprite_shifter_hi[i] = self.ppubus.read_ppubus(addr + 8);
         }

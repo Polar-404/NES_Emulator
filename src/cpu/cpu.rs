@@ -109,43 +109,43 @@ impl CPU {
             AddressingMode::Immediate => self.program_counter, //pega o proximo imediato proximo valor
             //e joga na memoria (no register A)
 
-            AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16, //
+            AddressingMode::ZeroPage => self.bus.mem_read(self.program_counter) as u16, //
 
-            AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
+            AddressingMode::Absolute => self.bus.mem_read_u16(self.program_counter),
 
             AddressingMode::ZeroPage_X => {
-                let pos = self.mem_read(self.program_counter);
+                let pos = self.bus.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_x) as u16;
                 addr
             }
             AddressingMode::ZeroPage_Y => {
-                let pos = self.mem_read(self.program_counter);
+                let pos = self.bus.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_y) as u16;
                 addr
             }
             AddressingMode::Absolute_X => {
-                let base = self.mem_read_u16(self.program_counter);
+                let base = self.bus.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
                 addr
             }
             AddressingMode::Absolute_Y => {
-                let base = self.mem_read_u16(self.program_counter);
+                let base = self.bus.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
             AddressingMode::Indirect_X => {
-                let base = self.mem_read(self.program_counter);
+                let base = self.bus.mem_read(self.program_counter);
 
                 let ptr: u8 = (base as u8).wrapping_add(self.register_x);
-                let lo = self.mem_read(ptr as u16);
-                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
+                let lo = self.bus.mem_read(ptr as u16);
+                let hi = self.bus.mem_read(ptr.wrapping_add(1) as u16);
                 (hi as u16) << 8 | (lo as u16)
             }
             AddressingMode::Indirect_Y => {
-                let base = self.mem_read(self.program_counter);
+                let base = self.bus.mem_read(self.program_counter);
 
-                let lo = self.mem_read(base as u16);
-                let hi = self.mem_read(base.wrapping_add(1) as u16);
+                let lo = self.bus.mem_read(base as u16);
+                let hi = self.bus.mem_read(base.wrapping_add(1) as u16);
                 let deref_base = (hi as u16) << 8 | (lo as u16);
                 let deref = deref_base.wrapping_add(self.register_y as u16);
 
@@ -178,18 +178,6 @@ impl CPU {
 
     }
 
-    // comandos de controle de memoria
-    pub fn mem_read(&mut self, addr: u16) -> u8 {
-        let val = self.bus.mem_read(addr);
-        val
-    }
-
-    pub fn mem_write(&mut self, addr: u16, data: u8) {
-        if self.bus.mem_write(addr, data) {
-            self.trigger_cpu_nmi();
-        }
-    }
-
     /////writes the program counter to
     //pub fn load(&mut self, program: Vec<u8>) {
     //    self.bus.load(program)
@@ -201,33 +189,12 @@ impl CPU {
         self.register_x = 0;
         self.status = CpuFlags::from_bits_truncate(0b100100);
 
-        self.program_counter = self.mem_read_u16(0xFFFC);
+        self.program_counter = self.bus.mem_read_u16(0xFFFC);
     }
     #[inline]
     fn update_zero_and_negative_flags(&mut self, result:u8) {
         self.status.set(CpuFlags::ZERO, result == 0);
         self.status.set(CpuFlags::NEGATIVE, result & 0b1000_0000 != 0);
-    }
-
-    ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
-    ///Then, take only the least significant bits, and set the others to 0. So it writes in reverse order 
-    /// 
-    ///Therefore writing in little-endian.
-    #[allow(dead_code)]
-    fn mem_write_u16(&mut self, pos: u16, data: u16) {
-        let hi = (data >> 8) as u8;
-        let lo = (data & 0xff) as u8; 
-        self.mem_write(pos, lo);
-        self.mem_write(pos + 1, hi);
-    }
-
-    ///Shift the 8 most significant bits to the right, storing their value in an 8-bit variable. 
-    ///Then, take only the least significant bits, and set the others to 0. 
-    ///Finally, return them in reverse order, reading in little-endian.
-    fn mem_read_u16(&mut self, pos: u16) -> u16 {
-        let lo = self.mem_read(pos) as u16;
-        let hi = self.mem_read(pos + 1) as u16;
-        return (hi << 8) | (lo as u16);
     }
 
 
@@ -238,7 +205,7 @@ impl CPU {
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
 
-        let value = self.mem_read(addr);
+        let value = self.bus.mem_read(addr);
         //println!("Lendo valor {:x} do endereço {:x}", value, addr);
 
         self.register_a = value;
@@ -247,7 +214,7 @@ impl CPU {
     ///LDA - Load X
     fn ldx(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let val = self.mem_read(addr);
+        let val = self.bus.mem_read(addr);
 
         self.register_x = val;
         self.update_zero_and_negative_flags(self.register_x);
@@ -255,7 +222,7 @@ impl CPU {
     ///LDA - Load Y
     fn ldy(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let val = self.mem_read(addr);
+        let val = self.bus.mem_read(addr);
 
         self.register_y = val;
         self.update_zero_and_negative_flags(self.register_y);
@@ -270,14 +237,14 @@ impl CPU {
     ///stores the accumulator into the target memory addrss
     fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        self.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
+        self.bus.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
     }
 
     ///Rotate Left
     fn rol(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let mut data = self.mem_read(addr);
+        let mut data = self.bus.mem_read(addr);
         let previous_carry = self.status.contains(CpuFlags::CARRY);
 
         if data & 0b1000_0000 != 0 {
@@ -289,7 +256,7 @@ impl CPU {
         if previous_carry {
             data = data | 0b0000_0001
         }
-        self.mem_write(addr, data);
+        self.bus.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
     }
     ///Rotate Left Register A
@@ -313,7 +280,7 @@ impl CPU {
     ///ROR - Rotate Right
     fn ror(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let mut data = self.mem_read(addr);
+        let mut data = self.bus.mem_read(addr);
         let previous_carry = self.status.contains(CpuFlags::CARRY);
 
         if data & 0b0000_0001 != 0 {
@@ -325,7 +292,7 @@ impl CPU {
         if previous_carry {
             data = data | 0b1000_0000
         }
-        self.mem_write(addr, data);
+        self.bus.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
     }
     ///Rotate Right Register A
@@ -349,14 +316,14 @@ impl CPU {
     ///Bitwise AND
     fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let data = self.mem_read(addr);
+        let data = self.bus.mem_read(addr);
         self.register_a = self.register_a & data;
         self.update_zero_and_negative_flags(self.register_a);
     }
     ///BIT - Bit Test
     fn bit(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let data = self.mem_read(addr);
+        let data = self.bus.mem_read(addr);
         let modification = self.register_a & data;
 
         self.status.set(CpuFlags::ZERO, modification == 0);
@@ -367,14 +334,14 @@ impl CPU {
     ///EOR - Bitwise Exclusive OR
     fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let data = self.mem_read(addr);
+        let data = self.bus.mem_read(addr);
         self.register_a = self.register_a ^ data;
         self.update_zero_and_negative_flags(self.register_a);
     }
     ///ORA - Bitwise OR
     fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let data = self.mem_read(addr);
+        let data = self.bus.mem_read(addr);
         self.register_a = self.register_a | data;
         self.update_zero_and_negative_flags(self.register_a);
     }
@@ -394,17 +361,17 @@ impl CPU {
 
     fn dec_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let data = self.mem_read(addr);
+        let data = self.bus.mem_read(addr);
         
         let modification = data.wrapping_sub(1);
-        self.mem_write(addr, modification);
+        self.bus.mem_write(addr, modification);
         self.update_zero_and_negative_flags(modification);
     }
 
     /// ASL - Arithmetic Shift Left
     fn asl(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
-        let mut data = self.mem_read(addr);
+        let mut data = self.bus.mem_read(addr);
         if data >> 7 == 1 {
             self.status.insert(CpuFlags::CARRY);
         }
@@ -412,7 +379,7 @@ impl CPU {
             self.status.remove(CpuFlags::CARRY);
         }
         data = data << 1;
-        self.mem_write(addr, data);
+        self.bus.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
         return data
     }
@@ -430,7 +397,7 @@ impl CPU {
     ///LSR - Logical Shift Right
     fn lsr(&mut self, mode: &AddressingMode) -> u8 {
         let addr = self.get_oprand_adress(mode);
-        let mut data = self.mem_read(addr);
+        let mut data = self.bus.mem_read(addr);
         if (data & 0b0000_0001) != 0 {
             self.status.insert(CpuFlags::CARRY);
         }
@@ -438,7 +405,7 @@ impl CPU {
             self.status.remove(CpuFlags::CARRY);
         }
         data = data >> 1;
-        self.mem_write(addr, data);
+        self.bus.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
         return data
     }
@@ -455,22 +422,22 @@ impl CPU {
     }
     ///JMP - Jump
     fn jmp_abs(&mut self) {
-        let location = self.mem_read_u16(self.program_counter);
+        let location = self.bus.mem_read_u16(self.program_counter);
         self.program_counter = location;
     }
     ///JMP - Jump
     fn jmp_indrect(&mut self) {
-        let location = self.mem_read_u16(self.program_counter);
+        let location = self.bus.mem_read_u16(self.program_counter);
         let indirect_ref: u16;
         if location & 0x00FF == 0x00FF {
             // implementação de um bug do 6502 que não rotaciona corretamente os bytes
             // quando o low byte era terminado em FF ele n passava o hi byte para o proximo, 
             // ao inves disso ele simplesmente dava "wrapping" no low byte
-            let lo = self.mem_read(location);
-            let hi = self.mem_read(location & 0xFF00);
+            let lo = self.bus.mem_read(location);
+            let hi = self.bus.mem_read(location & 0xFF00);
             indirect_ref = (hi as u16) << 8 | (lo as u16);
         } else {
-            indirect_ref = self.mem_read_u16(location)
+            indirect_ref = self.bus.mem_read_u16(location)
         }
         self.program_counter = indirect_ref;
     }
@@ -524,7 +491,7 @@ impl CPU {
         //}
         self.increment_stack();
         //println!("addr: {}", STACK + self.stack_pointer as u16);
-        let data = self.mem_read( STACK + self.stack_pointer as u16) ;
+        let data = self.bus.mem_read( STACK + self.stack_pointer as u16) ;
         //println!("data {}",data);
         data
     }
@@ -535,19 +502,19 @@ impl CPU {
     }
     /// PUSH ACCUMULATOR
     fn pha(&mut self, data: u8) {
-        self.mem_write(STACK + self.stack_pointer as u16, data);
+        self.bus.mem_write(STACK + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
     ///Pull Processor Status
     fn plp(&mut self) {
 //TODO: necessario revisão e testes
         let flags = CpuFlags::from_bits_truncate(self.stack_pop());
-        self.status.insert(flags);
+        self.status = flags;
         self.status.remove(CpuFlags::BREAK);
         self.status.insert(CpuFlags::BREAK2);
     }
     fn stack_push(&mut self, data: u8) {
-        self.mem_write((STACK as u16) + self.stack_pointer as u16, data);
+        self.bus.mem_write((STACK as u16) + self.stack_pointer as u16, data);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1)
     }
     ///Push Processor Status
@@ -562,7 +529,7 @@ impl CPU {
     ///TXS - Transfer X to Stack Pointer
     fn txs(&mut self) {
         self.stack_pointer = self.register_x;
-        self.update_zero_and_negative_flags(self.stack_pointer);
+        //self.update_zero_and_negative_flags(self.stack_pointer);
     }
 
     fn stack_push_u16(&mut self, data: u16) {
@@ -574,12 +541,12 @@ impl CPU {
     //Jump to Subroutine
     fn jsr(&mut self) {
         self.stack_push_u16(self.program_counter.wrapping_add(1));
-        self.program_counter = self.mem_read_u16(self.program_counter)
+        self.program_counter = self.bus.mem_read_u16(self.program_counter)
         
     }
     fn write_register(&mut self, mode: &AddressingMode, register: u8) {
         let addr = self.get_oprand_adress(mode);
-        self.mem_write(addr, register);
+        self.bus.mem_write(addr, register);
     }
     fn stack_pop_u16(&mut self) -> u16 {
         let lo = self.stack_pop() as u16;
@@ -607,7 +574,7 @@ impl CPU {
         if condition {
             self.cycles += 1;
 
-            let offset = self.mem_read(self.program_counter) as i8;
+            let offset = self.bus.mem_read(self.program_counter) as i8;
             let base_addr = self.program_counter.wrapping_add(1);
             let new_program_counter = base_addr.wrapping_add(offset as u16);
 
@@ -621,7 +588,7 @@ impl CPU {
 
     fn compare(&mut self, mode: &AddressingMode, register: u8) {
         let addr = self.get_oprand_adress(mode);
-        let mem_val = self.mem_read(addr);
+        let mem_val = self.bus.mem_read(addr);
 
         if register >= mem_val {
             self.status.insert(CpuFlags::CARRY);
@@ -651,7 +618,7 @@ impl CPU {
     /// depois finaliza o comando passando o resultado para o registrador A e dando update nas flags ZERO e NEGATIVE
     fn adc(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let val = self.mem_read(addr);
+        let val = self.bus.mem_read(addr);
 
         let sum = self.register_a as u16 + val as u16  //+ (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
         + (if self.status.contains(CpuFlags::CARRY) {
@@ -683,7 +650,7 @@ impl CPU {
     ///SBC - Subtract with Carry
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let val = self.mem_read(addr);
+        let val = self.bus.mem_read(addr);
 
         let val_complement = !val;
         let carry = if self.status.contains(CpuFlags::CARRY) { 1u16 } else { 0u16 };
@@ -723,10 +690,10 @@ impl CPU {
     //INC - Increment Memory
     fn inc_mem(&mut self, mode: &AddressingMode) {
         let addr = self.get_oprand_adress(mode);
-        let data = self.mem_read(addr);
+        let data = self.bus.mem_read(addr);
         
         let modification = data.wrapping_add(1);
-        self.mem_write(addr, modification);
+        self.bus.mem_write(addr, modification);
         self.update_zero_and_negative_flags(modification);
     }
     ///INX - Increment X
@@ -738,20 +705,6 @@ impl CPU {
     fn iny(&mut self) {
         self.register_y = self.register_y.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_y);
-    }
-
-    ///Starts looping the instructions, 0x00(BRK) is the only way to break the loop.
-    /// 
-    ///The program counter by default starts at 0xFFFC, and it will read top to down increasing by the number of bytes of the current instruction
-    #[allow(dead_code)]
-    pub fn run(&mut self) {
-        self.run_with_callback(|_| {});
-    }
-    
-    pub fn run_with_callback<F>(&mut self, mut callback: F) where F: FnMut(&mut CPU) {
-        while self.step(&mut callback).0 {
-            //no need to do anything but maybe some callback or anything useful could be placed here
-        }
     }
 
     /// function to log the cpu state with the nestest.nes log format
@@ -804,17 +757,23 @@ impl CPU {
         }
     }
 
-    pub fn step<F>(&mut self, mut callback: F) -> (bool, u8) 
+    pub fn step(&mut self) -> (bool, u8)  {
+        self.step_with_callback(None::<fn(&mut Self)>)
+    }
+
+    pub fn step_with_callback<F>(&mut self, mut callback: Option<F>) -> (bool, u8) 
     where F: FnMut(&mut CPU) {
         let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
 
-        callback(self);
+        if let Some(ref mut c) = callback {
+            c(self)
+        }
 
         if self.vblank {
             self.trigger_cpu_nmi();
         }
 
-        let code = self.mem_read(self.program_counter);
+        let code = self.bus.mem_read(self.program_counter);
         self.program_counter += 1;
 
         let program_counter_state = self.program_counter;
@@ -1055,7 +1014,7 @@ mod test {
     impl CPU {
         pub fn run_test(&mut self) {
             self.reset_interrupt();
-            self.run()
+            self.step();
         }
     }
 
@@ -1085,7 +1044,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xA5, 0x10, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0x55);
+        cpu.bus.mem_write(0x10, 0x55);
 
         cpu.run_test();
         assert_eq!(cpu.register_a, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
@@ -1096,7 +1055,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xA6, 0x10, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0x55);
+        cpu.bus.mem_write(0x10, 0x55);
 
         cpu.run_test();
         assert_eq!(cpu.register_x, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
@@ -1108,7 +1067,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xA4, 0x10, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0x55);
+        cpu.bus.mem_write(0x10, 0x55);
 
         cpu.run_test();
         assert_eq!(cpu.register_y, 0x55) //0xA5 é o LDA zero page, procurando no endereço 
@@ -1141,7 +1100,7 @@ mod test {
         let mapper = TestMapper::new(vec![]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write_u16(0x1fef, 0xef);
+        cpu.bus.mem_write_u16(0x1fef, 0xef);
 
         assert_eq!(cpu.bus.mem_read_u16(0x1fef), 0xef);
     }
@@ -1152,7 +1111,7 @@ mod test {
         let mapper = TestMapper::new(vec![0x69, 0x10, 0x69, 0x32]);
         let mut cpu = CPU::new(mapper);
 
-        //cpu.mem_write(0x69, data);
+        //cpu.bus.mem_write(0x69, data);
         cpu.run_test();
         assert_eq!(cpu.register_a, 0x42);
     }
@@ -1164,8 +1123,8 @@ mod test {
         0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0xab); //carrega 0xab
-        cpu.mem_write(0x20, 0x05); //carrega 0x02
+        cpu.bus.mem_write(0x10, 0xab); //carrega 0xab
+        cpu.bus.mem_write(0x20, 0x05); //carrega 0x02
 
         //le o 0xf5, dps le o 0x31
         cpu.run_test();      // BRK]);
@@ -1176,8 +1135,8 @@ mod test {
         let mapper = TestMapper::new(vec![0xa5, 0x10, 0x65, 0x20, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0xff);
-        cpu.mem_write(0x20, 0x01);
+        cpu.bus.mem_write(0x10, 0xff);
+        cpu.bus.mem_write(0x20, 0x01);
         cpu.run_test();
         assert_eq!(cpu.register_a, 0x00);
 
@@ -1189,8 +1148,8 @@ mod test {
         let mapper = TestMapper::new(vec![0xa5, 0x10, 0x65, 0x20, 0x69, 0x50, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0xff);
-        cpu.mem_write(0x20, 0x01);
+        cpu.bus.mem_write(0x10, 0xff);
+        cpu.bus.mem_write(0x20, 0x01);
         cpu.run_test();
 
         assert!(!cpu.status.contains(CpuFlags::ZERO)); //zero flag foi desligada
@@ -1244,7 +1203,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xa9, 0x2f, 0xC5, 0x10,]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0x2f);
+        cpu.bus.mem_write(0x10, 0x2f);
         cpu.run_test();
 
         assert!(cpu.status.contains(CpuFlags::ZERO));
@@ -1256,7 +1215,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xa9, 0x1A, 0x25, 0x10,]);
         let mut cpu = CPU::new(mapper);
         
-        cpu.mem_write(0x10, 0x5C); //0x5C == 0b0101_1100
+        cpu.bus.mem_write(0x10, 0x5C); //0x5C == 0b0101_1100
         cpu.run_test(); //0x1A == 0b0001_1010
         // and == 0b0001_1000
         assert_eq!(cpu.register_a, 0x18);
@@ -1266,9 +1225,9 @@ mod test {
         let mapper = TestMapper::new(vec![0x06, 0x10]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0b0001_0000);
+        cpu.bus.mem_write(0x10, 0b0001_0000);
         cpu.run_test();
-        assert_eq!(cpu.mem_read(0x10), 0b0010_0000);
+        assert_eq!(cpu.bus.mem_read(0x10), 0b0010_0000);
     }
     #[test]
     fn test_bcc_instruction() {
@@ -1289,7 +1248,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xa9, 0xf8, 0x24, 0x20]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x20, 0xf3);
+        cpu.bus.mem_write(0x20, 0xf3);
         cpu.run_test();
         assert!(!cpu.status.contains(CpuFlags::ZERO));
         assert!(cpu.status.contains(CpuFlags::NEGATIVE));
@@ -1300,9 +1259,9 @@ mod test {
         let mapper = TestMapper::new(vec![0xc6, 0x50, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x50, 0x0f);
+        cpu.bus.mem_write(0x50, 0x0f);
         cpu.run_test();
-        assert_eq!(cpu.mem_read(0x50), 0x0e);
+        assert_eq!(cpu.bus.mem_read(0x50), 0x0e);
     }
     #[test]
     fn test_decrement_register() {
@@ -1319,9 +1278,9 @@ mod test {
         let mapper = TestMapper::new(vec![0xE6, 0x10, 0x00]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x10, 0x0e);
+        cpu.bus.mem_write(0x10, 0x0e);
         cpu.run_test();
-        assert_eq!(cpu.mem_read(0x10), 0x0f);
+        assert_eq!(cpu.bus.mem_read(0x10), 0x0f);
     }
     #[test]
     fn test_jump_abs() {
@@ -1339,7 +1298,7 @@ mod test {
         let mut cpu = CPU::new(mapper);
         
         cpu.run_test();
-        assert_eq!(cpu.mem_read((STACK + cpu.stack_pointer as u16).wrapping_add(1)), 0xe0)
+        assert_eq!(cpu.bus.mem_read((STACK + cpu.stack_pointer as u16).wrapping_add(1)), 0xe0)
     }
     #[test]
     //it doenst purposefully panic anymore
@@ -1349,7 +1308,7 @@ mod test {
 
         cpu.stack_pointer = 0xFF;
 
-        cpu.mem_write(0x0100, 0xAB);
+        cpu.bus.mem_write(0x0100, 0xAB);
 
         cpu.run_test();
 
@@ -1370,7 +1329,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xa9, 0xA2, 0x45, 0x20]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x20, 0xe0);
+        cpu.bus.mem_write(0x20, 0xe0);
         cpu.run_test();
         assert_eq!(cpu.register_a ,0b0100_0010);
     }
@@ -1392,24 +1351,24 @@ mod test {
         
         cpu.run_test();
         println!("registrador {}",cpu.register_x);
-        assert_eq!(cpu.mem_read(0x20), 0xe0);
+        assert_eq!(cpu.bus.mem_read(0x20), 0xe0);
     }
     #[test]
     fn test_lsr() {
         let mapper = TestMapper::new(vec![0x46, 0x20]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x20, 0xe1);
+        cpu.bus.mem_write(0x20, 0xe1);
         cpu.run_test();
         assert!(cpu.status.contains(CpuFlags::CARRY));
-        assert_eq!(cpu.mem_read(0x20), 0b0111_0000);
+        assert_eq!(cpu.bus.mem_read(0x20), 0b0111_0000);
     }
     #[test]
     fn test_ora_from_mem() {
         let mapper = TestMapper::new(vec![0xa9, 0xa1, 0x05, 0x20]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x20, 0xe0);
+        cpu.bus.mem_write(0x20, 0xe0);
         cpu.run_test();
         assert_eq!(cpu.register_a, 0b1110_0001);
     }
@@ -1434,7 +1393,7 @@ mod test {
         let mapper = TestMapper::new(vec![0xa9, 0xe0, 0xe5, 0x20]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x20, 0x02);
+        cpu.bus.mem_write(0x20, 0x02);
         cpu.run_test();
         assert_eq!(cpu.register_a, 0xde);
     }
@@ -1457,9 +1416,9 @@ mod test {
         let mapper = TestMapper::new(vec![0x26, 0x20]);
         let mut cpu = CPU::new(mapper);
 
-        cpu.mem_write(0x20, 0xe0);
+        cpu.bus.mem_write(0x20, 0xe0);
         cpu.run_test();
-        assert_eq!(cpu.mem_read(0x20), 0xc0);
+        assert_eq!(cpu.bus.mem_read(0x20), 0xc0);
     }
     #[test]
     fn test_txa() {

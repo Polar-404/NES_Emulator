@@ -15,11 +15,11 @@ impl PPUAddress {
         PPUAddress { addr: 0 }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn set_coarse_x(&mut self, data: u8) {
         self.addr = (self.addr & 0b111_11_11111_00000) | (data as u16 & 0x1F)
     }
-    #[inline]
+    #[inline(always)]
     pub fn get_coarse_x(&self) -> u8 {
         (self.addr & 0b11111) as u8
     }
@@ -32,27 +32,15 @@ impl PPUAddress {
     pub fn get_coarse_y(&self) -> u8 {
         ((self.addr & 0b11111_00000) >> 5) as u8
     }
-
-    #[inline]
-    #[allow(unused)] //TODO
-    pub fn set_nametable(&mut self, val: u8) {
-        self.addr = (self.addr & 0b111_00_11111_11111) | ((val as u16) << 10);
-    }
-    #[inline]
-    #[allow(unused)] //TODO
-    pub fn get_nametable(&self) -> u8 {
-        ((self.addr & 0b000_11_00000_00000) >> 10) as u8
-    }
-
     #[inline]
     pub fn set_fine_y(&mut self, val: u8) {
         self.addr = (self.addr & 0b000_11_11111_11111) | ((val as u16 & 0x07) << 12)
     }
-    #[inline]
+    #[inline(always)]
     pub fn get_fine_y(&self) -> u8 {
         ((self.addr & 0b111_00_00000_00000) >> 12) as u8
     }
-
+    #[inline]
     pub fn increment_coarse_x(&mut self) {
         let mut coarse_x = self.get_coarse_x();
         if coarse_x == 31 {
@@ -63,6 +51,7 @@ impl PPUAddress {
         }
         self.set_coarse_x(coarse_x);
     }
+    #[inline]
     pub fn increment_fine_y(&mut self) {
         let fine_y = self.get_fine_y();
         if fine_y < 7 {
@@ -101,12 +90,12 @@ impl PPUAddress {
     }
 
     //copies the horizontal position "t" to the current "v"
-    #[inline]
+    #[inline(always)]
     pub fn transfer_address_x(&mut self, source: PPUAddress) {
         const MASK: u16 = 0b000_01_00000_11111; // 0x041F
         self.addr = (self.addr & !MASK) | (source.addr & MASK);
     }
-    #[inline]
+    #[inline(always)]
     pub fn transfer_address_y(&mut self, source: PPUAddress) {
         const MASK: u16 = 0b111_10_11111_00000; // 0x7BE0
         self.addr = (self.addr & !MASK) | (source.addr & MASK);
