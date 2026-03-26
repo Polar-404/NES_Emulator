@@ -22,6 +22,7 @@ impl PPUBUS {
     }
 
     pub fn write_ppubus(&mut self, addr: u16, data: u8) {
+        let addr =  addr & 0x3FFF;
         match addr {
 
             0..=0x1FFF => {
@@ -42,12 +43,13 @@ impl PPUBUS {
                 self.palette_ram[palette_addr] = data;
             }
             _ => {
-                todo!();
+                unreachable!()
             }
         }
     }
     //TODO remover a referencia mutavel e limpar esse codigo depois que funcionar
-    pub fn read_ppubus(&mut self, addr: u16) -> u8{
+    pub fn read_ppubus(&mut self, addr: u16) -> u8 {
+        let addr =  addr & 0x3FFF;
         match addr {
 
             0..=0x1FFF => {
@@ -82,7 +84,8 @@ impl PPUBUS {
         match self.mapper.borrow().mirroring() {
             Mirroring::Vertical => (addr & 0x07FF) as usize,
             Mirroring::Horizontal => ((addr & 0x03FF) + ((addr & 0x0800) >> 1)) as usize,
-
+            Mirroring::SingleScreenLower => (addr & 0x03FF) as usize,
+            Mirroring::SingleScreenUpper => ((addr & 0x03FF) + 0x0400) as usize,
             //TODO didnt implement OneScreen mirroring yet
             #[allow(unreachable_patterns)]
             _ => {

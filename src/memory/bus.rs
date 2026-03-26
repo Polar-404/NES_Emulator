@@ -1,9 +1,12 @@
 use core::panic;
 use std::path::Path;
+
 use crate::apu::apu::APU;
+use crate::apu::audio::AudioOutput;
 use crate::memory::mappers::*;
 use crate::ppu::ppu::PPU;
 use crate::memory::joypads::JoyPad;
+use ringbuf::traits::{Observer as _, Producer as _};
 
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
@@ -13,7 +16,7 @@ pub struct BUS {
     //[https://www.nesdev.org/wiki/CPU_memory_map]
 
     cpu_memory: [u8; 0x0800],
-    nes_apu_and_io_registers: [u8; 0x18],
+    //nes_apu_and_io_registers: [u8; 0x18],
 
     ///APU and I/O functionality that is normally disabled.
     apu_and_io_functionality: [u8; 0x08], 
@@ -34,7 +37,6 @@ impl BUS {
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
         BUS {
             cpu_memory: [0; 0x0800],
-            nes_apu_and_io_registers: [0; 0x18],
             apu_and_io_functionality: [0; 0x08],
             joypad_1: JoyPad::new(),
             joypad_2: JoyPad::new(),
@@ -43,7 +45,7 @@ impl BUS {
             apu: APU::default(),
         }
     }
-    
+    #[inline(always)]
     pub fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             0x0000..=0x1FFF => {
@@ -78,6 +80,7 @@ impl BUS {
     ///Returns true if the cpu should trigger an NMI
     /// 
     ///It should trigger an NMI if the ppu writes at ppuctrl AND NMI was just enabled AND the PPU is already in vblank
+    #[inline(always)]
     pub fn mem_write(&mut self, addr: u16, val: u8) -> bool {
         match addr {
             0x0000..=0x1FFF => {
@@ -127,13 +130,13 @@ impl BUS {
         }
     }
 
-    #[allow(dead_code)]
+    #[inline(always)]
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         return (hi << 8) | (lo as u16);
     }
-    #[allow(dead_code)]
+
     pub fn mem_write_u16(&mut self, pos: u16, data: u16) {
         let hi = (data >> 8) as u8;
         let lo = (data & 0xff) as u8; 
@@ -153,6 +156,16 @@ impl BUS {
         }
         false
     }
+
+    pub fn sync_audio(&mut self, cycles: u8, audio: &mut (AudioOutput, u32)) {
+        let capacity = audio.0.producer.capacity().get() as f64;
+        let len = audio.0.producer.occupied_len() as f64;
+        let fullness = len / capacity;
+
+        if let Some(sample) = self.apu.tick(cycles, audio.1, fullness) {
+            let _ = audio.0.producer.try_push(sample);
+        }
+    }
     
     //pub fn load(&mut self, program: Vec<u8>) {
     //    self.unmapped[0x0000 .. (0x0000 + program.len())].copy_from_slice(&program[..]); //copia de src: program para self: memory
@@ -161,7 +174,6 @@ impl BUS {
 }
 
 //TODO it should possibly return a result and have better error handling
-#[allow(dead_code)]
 pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
@@ -178,47 +190,51 @@ pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
     println!("Mapper ID -> {}", mapper_match);
     println!("Has Trainer -> {}", has_trainer);
 
-    match mapper_match {
-        0 => {
-            let program_size = rom_data[4] as usize * 0x4000; // the size of the PRG ROM may be 16kb or 32kb, 
-            //that info is at byte 4 as [1 if 16kb and 2 if 32kb]
+    let program_size = rom_data[4] as usize * 0x4000; // the size of the PRG ROM may be 16kb or 32kb, 
+    //that info is at byte 4 as [1 if 16kb and 2 if 32kb]
 
-            let chr_size = rom_data[5] as usize * 0x2000; // then I take the chr size, which is at byte 5
+    let chr_size = rom_data[5] as usize * 0x2000; // then I take the chr size, which is at byte 5
 
-            let prg_rom_end = 16 + program_size; //the header size is 16 bytes
-            let prg_rom_data = rom_data[16..prg_rom_end].to_vec(); // mapping the actual game
-            
-            //The CHR ROM starts after the PRG ROM
-            let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].to_vec();
-            
-            //mirroring type
-            let mirroring_byte = rom_data[6] & 0b0000_0001;
-            let mirroring_type: Mirroring;
+    let prg_rom_start = 16 + if has_trainer {512} else {0}; //the header size is 16 bytes
+    let prg_rom_end = prg_rom_start + program_size; 
+    let prg_rom_data = rom_data[prg_rom_start..prg_rom_end].to_vec(); // mapping the actual game
+    
+    //The CHR ROM starts after the PRG ROM
+    let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].to_vec();
+    
+    //mirroring type
+    let mirroring_byte = rom_data[6] & 0b0000_0001;
+    let mirroring_type: Mirroring;
 
-            if (mirroring_byte >> 3) & 0b0000_0001 == 1 {
-                todo!("FOUR SCREEN BIT")
-            } else {
-                if mirroring_byte == 0 {
-                    mirroring_type = Mirroring::Horizontal
-                } else {
-                    mirroring_type = Mirroring::Vertical
-                }
-            }
+    if (mirroring_byte >> 3) & 0b0000_0001 == 1 {
+        todo!("FOUR SCREEN BIT")
+    } else {
+        if mirroring_byte == 0 {
+            mirroring_type = Mirroring::Horizontal
+        } else {
+            mirroring_type = Mirroring::Vertical
+        }
+    }
 
-            Rc::new(
-                RefCell::new(
-                    Box::new(InesMapper000 {
-                        prg_rom: prg_rom_data,
-                        chr_rom: chr_rom_data,
-                        prg_ram: vec![0; 8192],
-                        mirroring: mirroring_type
-                    })  
+    #[inline]
+    /// fn to reduce code repetition
+    fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<Box<dyn Mapper>>>
+    where T: Mapper + 'static {
+        Rc::new(
+            RefCell::new(
+                Box::new(
+                    mapper
                 )
             )
+        )
+    }
 
+    match mapper_match {
+        0 => {
+            wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))
         }
         1 => {
-            panic!("Mapper 1 is not suported yet")
+            wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data))
         }
         _ => panic!("The given mapper is not suported yet")
     }
