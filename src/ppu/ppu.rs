@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use super::{
     ppuaddr::PPUAddress,
     ppubus::PPUBUS,
-    palettes::NTSC_PALETTE,
+    palettes::PaletteTheme,
 
     registers::{ PpuCtrlFlags, PpuStatusFlags, PpuMaskFlags },
 };
@@ -85,7 +85,9 @@ pub struct PPU {
     sprite_count:           usize,
     sprite_shifter_lo:      [u8; 8],
     sprite_shifter_hi:      [u8; 8],
-    sprite0_hit_possible:   bool
+    sprite0_hit_possible:   bool,
+
+    pub color_palette: PaletteTheme,
 }
 
 
@@ -132,8 +134,9 @@ impl PPU {
             sprite_count:           0,
             sprite_shifter_lo:      [0; 8],
             sprite_shifter_hi:      [0; 8],
-            sprite0_hit_possible: false
+            sprite0_hit_possible: false,
             
+            color_palette: PaletteTheme::DefaultNtsc,
         }
     }
 
@@ -527,7 +530,7 @@ impl PPU {
         };
 
         let color_idx = (self.ppubus.read_ppubus(palette_addr) as usize) & 0x3F;
-        let color = NTSC_PALETTE[color_idx];
+        let color = self.color_palette.get_collors()[color_idx];
 
         let x = (self.cycle - 1) as usize;
         let y = self.scanline as usize;

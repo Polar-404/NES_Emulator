@@ -1,19 +1,21 @@
-use std::path::{Path, PathBuf};
+use std::{fmt::Error, io, path::{Path, PathBuf}};
 
-use macroquad::prelude::*;
+use macroquad::{prelude::*, ui::{hash, root_ui, widgets}};
 use arboard::Clipboard;
-use ringbuf::traits::{Observer as _, Producer as _};
+use sysinfo::{System, Pid};
 
 use crate::{
     cpu::cpu::CPU, 
     memory::joypads::JoyPadButtons,
     apu::audio::AudioOutput,
+    menu::menu::*,
 };
 
 mod cpu;
 mod memory;
 mod ppu;
 mod apu;
+mod menu;
 
 #[macro_use]
 extern crate lazy_static;
@@ -26,20 +28,58 @@ const MULTIPLY_RESOLUTION: i32 = 2;
 const DEFAULT_GAME_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/NES_GAMES/Mario/Super Mario Bros. (World).nes");
 const DEFAULT_GAME_NAME: &str = "Super Mario Bros. (World)";
 
-const CPU_FREQ: f64 = 1_789_773.0;
+struct PerfomanceStats {
+    sys: System,
+    pid: Pid,
+
+    cpu_usage: f32,
+    main_emu_thread: f32,
+    memory_usage_mb: f64,
+    last_update: f64,
+}
+impl PerfomanceStats {
+    pub fn new() -> Self {
+        Self {
+            sys: System::new_all(),
+            pid: sysinfo::get_current_pid().unwrap(),
+            cpu_usage: 0.0,
+            main_emu_thread: 0.0,
+            memory_usage_mb: 0.0,
+            last_update: get_time(),
+        }
+    }
+    pub fn update_status(&mut self) {
+        let current_time = get_time();
+        if current_time - self.last_update >= 0.5 {
+            self.sys.refresh_process(self.pid);
+            if let Some(process) = self.sys.process(self.pid) {
+                self.main_emu_thread = process.cpu_usage(); 
+                self.cpu_usage = self.main_emu_thread / self.sys.cpus().len() as f32;
+                self.memory_usage_mb = process.memory() as f64 / 1024.0 / 1024.0;
+            } 
+            self.last_update = current_time;
+        }
+    }
+}
 
 struct EmulatorInstance {
+    //emulator itself
     cpu: CPU, 
+
     image: Image, 
     ppu_texture: Texture2D, 
+
     show_debug_info: bool, 
     is_paused: bool,
-    cycles_since_sample: f64
+
+    debug_frame_counter: u8,
+    cached_debug_text: Vec<String>,
+
+    stats: PerfomanceStats
 
 } impl EmulatorInstance {
-    fn new(game_path: PathBuf) -> EmulatorInstance {
-        
-        let mapper = memory::bus::load_rom_from_file(Path::new(game_path.as_path()));
+    fn new(game_path: PathBuf) -> Result<EmulatorInstance, Box<dyn std::error::Error>> {
+        let mapper = memory::bus::load_rom_from_file(Path::new(game_path.as_path()))?;
         
         let mut cpu = CPU::new(mapper);
         
@@ -58,47 +98,69 @@ struct EmulatorInstance {
 
         clear_background(BLACK);
 
-        EmulatorInstance { 
+        Ok(EmulatorInstance { 
             //mapper: mapper,
             cpu: cpu, 
             image: image, 
             ppu_texture: ppu_texture, 
             show_debug_info: false, 
             is_paused: false,
-            cycles_since_sample: 0.0,
-        }
-    }
+            stats: PerfomanceStats::new(),
 
-    #[inline]
-    fn step(&mut self, audio: &mut Option<(AudioOutput, u32)>) {
+            debug_frame_counter: 0,
+            cached_debug_text: Vec::new(),
+        })
+    }    
+    pub fn show_debug_info(&mut self) {
+        if self.show_debug_info {
+            let pos_x: f32 = 520.0 * MULTIPLY_RESOLUTION as f32; // Posição X para informações de depuração
+            let mut pos_y: f32 = 30.0; // Posição Y inicial
+            let line_height = 30.0; // Altura da linha para espaçamento
+            let font_size = 30.0; // Tamanho da fonte
 
-        let opcode_cycles = self.cpu.step(|_| {}).1;
+            self.debug_frame_counter = (self.debug_frame_counter + 1) % 4;
 
-        if let Some(ref mut audio) = audio {
-            self.cycles_since_sample += opcode_cycles as f64;
+            if self.debug_frame_counter == 0 {
 
-            let capacity = audio.0.producer.capacity().get() as f64;
-            let len = audio.0.producer.occupied_len() as f64;
-            let fullness = len / capacity; // goes from 0.0 (empty) up to 1.0 (full)
+                self.stats.update_status();
 
-            let rate_adjustment = if fullness < 0.4 {
-                0.98
-            } else if fullness > 0.6 {
-                1.02
-            } else {
-                1.0 
-            };
+                self.cached_debug_text.clear();
 
-            let cycles_per_sample = (CPU_FREQ / audio.1 as f64) * rate_adjustment;
+                // Geral
+                self.cached_debug_text.push(format!("Vol: {:.0}%", self.cpu.bus.apu.volume * 100.0));
+                self.cached_debug_text.push(format!("CPU: {:.1}% | Thread: {:.1}%", self.stats.cpu_usage, self.stats.main_emu_thread));
+                self.cached_debug_text.push(format!("RAM: {:.2} MB", self.stats.memory_usage_mb));
 
-            if self.cycles_since_sample >= cycles_per_sample {
-                self.cycles_since_sample -= cycles_per_sample;
-                let sample = self.cpu.bus.apu.get_sample();
-                let _ = audio.0.producer.try_push(sample);
+                // Espaçamento vazio (opcional, para manter o layout original)
+                self.cached_debug_text.push(String::new());
+
+                // CPU Info
+                self.cached_debug_text.push(format!("STATUS: {}", CPU::format_cpu_status(self.cpu.status.bits())));
+                self.cached_debug_text.push(format!("PC: {:#06x}", self.cpu.program_counter));
+                self.cached_debug_text.push(format!("CYCLES: {:?}", self.cpu.cycles));
+                self.cached_debug_text.push(format!("A: {:#04x} | X: {:#04x} | Y: {:#04x}", self.cpu.register_a, self.cpu.register_x, self.cpu.register_y));
+
+                // Espaçamento
+                self.cached_debug_text.push(String::new());
+
+                // PPU Info
+                self.cached_debug_text.push(String::from("PPU INFO:"));
+                self.cached_debug_text.push(format!("PPUCTRL: {:#010b} ({:#04x})", self.cpu.bus.ppu.ctrl.bits(), self.cpu.bus.ppu.ctrl.bits()));
+                self.cached_debug_text.push(format!("PPUMASK: {:#010b} ({:#04x})", self.cpu.bus.ppu.mask, self.cpu.bus.ppu.mask));
+                self.cached_debug_text.push(format!("PPUSTATUS: {:#010b} ({:#04x})", self.cpu.bus.ppu.status.bits(), self.cpu.bus.ppu.status.bits()));
+                self.cached_debug_text.push(format!("TempVRAM: {:#06x}", self.cpu.bus.ppu.t.addr));
+                self.cached_debug_text.push(format!("VRAM: {:#06x}", self.cpu.bus.ppu.t.addr));
+                self.cached_debug_text.push(format!("PPU Cycle: {} | Scanline: {}", self.cpu.bus.ppu.cycle, self.cpu.bus.ppu.scanline));
+                self.cached_debug_text.push(format!("Frame Complete: {:?}", self.cpu.bus.ppu.frame_complete));
             }
+
+            for line in &self.cached_debug_text {
+                draw_text(line, pos_x, pos_y, font_size, WHITE);
+                pos_y += line_height;
+            }
+
         }
     }
-    
 }
 enum EmulatorState {
     Menu,
@@ -117,9 +179,17 @@ fn window_conf() -> Conf {
         window_width: 720 * MULTIPLY_RESOLUTION,
         window_height: 480 * MULTIPLY_RESOLUTION,
 
+        sample_count: 0,
+
         high_dpi: true,
         fullscreen: false,
+
+        platform: miniquad::conf::Platform {
+            linux_backend: miniquad::conf::LinuxBackend::X11Only,
+            ..Default::default()
+        },
         ..Default::default()
+
     }
 }
 
@@ -131,27 +201,24 @@ async fn main() {
 
     let frame_time = std::time::Duration::from_secs_f64(1.0/60.0);
     let mut frame_deadline = std::time::Instant::now();
+    let skin = create_customized_skin(MULTIPLY_RESOLUTION as f32);
 
     async fn rungame(emulator: &mut EmulatorInstance, audio: &mut Option<(AudioOutput, u32)>) {
 
-        let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
-        let mut cycles_since_sample: f64 = 0.0;
+        //let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
+        //let mut cycles_since_sample: f64 = 0.0;
 
-        let mut sample_count = 0;
-        let mut sample_sum = 0.0;
-        
-        if is_key_pressed(KeyCode::Space) {
-            emulator.is_paused = !emulator.is_paused;
-        }
-        if !emulator.is_paused {
-            emulator.cpu.bus.ppu.frame_complete = false;
-            let sample = emulator.cpu.bus.apu.get_sample();
-            if sample != 0.0 {
-                //println!("Opa, tem som saindo da APU: {}", sample);
-            }
-            while !emulator.cpu.bus.ppu.frame_complete {
-                //emulator.cpu.log_state(&mut log_file);
-                emulator.step(audio);
+        //let mut sample_count = 0;
+        //let mut sample_sum = 0.0;
+
+        emulator.cpu.bus.ppu.frame_complete = false;
+
+        while !emulator.cpu.bus.ppu.frame_complete {
+            //emulator.cpu.log_state(&mut log_file);
+            let (_, cycles) = emulator.cpu.step();
+
+            if let Some(ref mut audio) = audio {
+                emulator.cpu.bus.sync_audio(cycles, audio);
             }
         }
 
@@ -159,12 +226,11 @@ async fn main() {
         emulator.image.bytes.copy_from_slice(&emulator.cpu.bus.ppu.frame_buffer);
         emulator.ppu_texture.update(&emulator.image);
 
-
         draw_texture_ex(
             &emulator.ppu_texture,
             0.0,
             0.0,
-            WHITE,
+            WHITE, /* Color { r: 1.0, g: 0.95, b: 0.95, a: 1.0 } */
             DrawTextureParams {
                 dest_size: Some(vec2(256.0 * (2.0 * MULTIPLY_RESOLUTION as f32), 240.0 * (2.0 * MULTIPLY_RESOLUTION as f32))), 
                 ..Default::default()
@@ -176,47 +242,12 @@ async fn main() {
             // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
             emulator.show_debug_info = !emulator.show_debug_info;
         }
+        if is_key_pressed(KeyCode::Period) {
+            emulator.cpu.bus.ppu.color_palette.cycle_palettes();
+        }
 
         draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
-    
-        if emulator.show_debug_info {
-            let pos_x: f32 = 520.0 * MULTIPLY_RESOLUTION as f32; // Posição X para informações de depuração
-            let mut pos_y: f32 = 30.0; // Posição Y inicial
-            let line_height = 30.0; // Altura da linha para espaçamento
-            let font_size = 30.0; // Tamanho da fonte
-
-            //volume: 
-            draw_text(&format!("Vol: {:.0}%", emulator.cpu.bus.apu.volume * 100.0), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height * 2.0;
-
-            // cpu info
-            draw_text(&format!("STATUS: {}", CPU::format_cpu_status(emulator.cpu.status.bits())), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PC: {:#06x}", emulator.cpu.program_counter), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("CYCLES: {:?}", emulator.cpu.cycles), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("A: {:#04x} | X: {:#04x} | Y: {:#04x}", emulator.cpu.register_a, emulator.cpu.register_x, emulator.cpu.register_y), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height * 2.0;
-
-            // ppu info
-            draw_text(&format!("PPU INFO:"), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPUCTRL: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.ctrl.bits(), emulator.cpu.bus.ppu.ctrl.bits()), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPUMASK: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.mask, emulator.cpu.bus.ppu.mask), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPUSTATUS: {:#010b} ({:#04x})", emulator.cpu.bus.ppu.status.bits(), emulator.cpu.bus.ppu.status.bits()), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("TempVRAM: {:#06x}", emulator.cpu.bus.ppu.t.addr), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("VRAM: {:#06x}", emulator.cpu.bus.ppu.t.addr), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("PPU Cycle: {} | Scanline: {}", emulator.cpu.bus.ppu.cycle, emulator.cpu.bus.ppu.scanline), pos_x, pos_y, font_size, WHITE);
-            pos_y += line_height;
-            draw_text(&format!("Frame Complete: {:?}", emulator.cpu.bus.ppu.frame_complete), pos_x, pos_y, font_size, WHITE);
-
-        }
+        emulator.show_debug_info();
     }
 
     loop {
@@ -278,21 +309,30 @@ async fn main() {
             EmulatorState::Loading { game_path } => {
                 draw_text("CARREGANDO...", 200.0, 200.0, 50.0, YELLOW);
                 
-                let emu_instance = EmulatorInstance::new(game_path.to_path_buf());
+                let emu_instance = match EmulatorInstance::new(game_path.to_path_buf()) {
+                    Ok(emu) => emu,
+                    Err(err) => {
+                        eprint!("[ERROR] An error occoured while Loading the ROM: {}", err);
+                        state = EmulatorState::Menu;
+                        path_buffer.clear();
+                        continue;
+                    }
+                };
+
                 let audio = AudioOutput::new(44100);
 
                 //print_program(&emu_instance);
                 println!("tipo de mirroring: {:?}", emu_instance.cpu.bus.ppu.ppubus.mapper.borrow().mirroring());
                 
-                state = EmulatorState::Running { emulator_instance: emu_instance, audio };
+                state = EmulatorState::Running { emulator_instance: emu_instance, audio};
             }
             EmulatorState::Running { ref mut emulator_instance, ref mut audio } => {
 
                 emulator_instance.cpu.bus.joypad_1.set_button(
-                    JoyPadButtons::A, is_key_down(KeyCode::J) || is_key_down(KeyCode::X) 
+                    JoyPadButtons::A, is_key_down(KeyCode::J) || is_key_down(KeyCode::Z) 
                 );
                 emulator_instance.cpu.bus.joypad_1.set_button(
-                    JoyPadButtons::B, is_key_down(KeyCode::K) || is_key_down(KeyCode::C)
+                    JoyPadButtons::B, is_key_down(KeyCode::K) || is_key_down(KeyCode::X)
                 );
                 emulator_instance.cpu.bus.joypad_1.set_button(
                     JoyPadButtons::SELECT, is_key_down(KeyCode::N) || is_key_down(KeyCode::C)
@@ -319,12 +359,17 @@ async fn main() {
                 if is_key_pressed(KeyCode::Minus) || is_key_pressed(KeyCode::KpSubtract) {
                     emulator_instance.cpu.bus.apu.volume = (emulator_instance.cpu.bus.apu.volume - 0.1).max(0.0);
                 }
-
-                rungame(emulator_instance, audio).await;
-
-                //cant change state beffore droping borrow, so it must be after rungame
+                
                 if is_key_pressed(KeyCode::Escape) {
-                    state = EmulatorState::Menu;
+                    emulator_instance.is_paused = !emulator_instance.is_paused;
+                }
+
+                if !emulator_instance.is_paused {
+                    rungame(emulator_instance, audio).await;
+                } else {
+                    if render_pause_menu(emulator_instance, Some(&skin)) {
+                        state = EmulatorState::Menu
+                    }
                 }
             }
         }
@@ -336,7 +381,6 @@ async fn main() {
             std::thread::sleep(frame_deadline - now);
         }
         frame_deadline += frame_time
-
 
     }
 }

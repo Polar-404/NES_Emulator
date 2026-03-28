@@ -1,4 +1,5 @@
 use core::panic;
+use std::fmt::Error;
 use std::path::Path;
 
 use crate::apu::apu::APU;
@@ -130,7 +131,6 @@ impl BUS {
         }
     }
 
-    #[inline(always)]
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
@@ -173,11 +173,23 @@ impl BUS {
     //}
 }
 
-//TODO it should possibly return a result and have better error handling
-pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
+#[inline]
+/// fn to reduce code repetition
+fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<Box<dyn Mapper>>>
+where T: Mapper + 'static {
+    Rc::new(
+        RefCell::new(
+            Box::new(
+                mapper
+            )
+        )
+    )
+}
+
+pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, Box<dyn std::error::Error>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
-    let rom_data = std::fs::read(path).expect("Failed to extract ROM");
+    let rom_data = std::fs::read(path)?;
     let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
 
     let has_trainer = (rom_data[6] & 0b0000_0100) != 0;
@@ -216,27 +228,14 @@ pub fn load_rom_from_file(path: &Path) -> Rc<RefCell<Box<dyn Mapper>>> {
         }
     }
 
-    #[inline]
-    /// fn to reduce code repetition
-    fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<Box<dyn Mapper>>>
-    where T: Mapper + 'static {
-        Rc::new(
-            RefCell::new(
-                Box::new(
-                    mapper
-                )
-            )
-        )
-    }
-
     match mapper_match {
         0 => {
-            wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))
+            Ok(wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type)))
         }
         1 => {
-            wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data))
+            Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data)))
         }
-        _ => panic!("The given mapper is not suported yet")
+        _ => Err(format!("Mapper {} is not supported yet", mapper_match).into())
     }
 }
 

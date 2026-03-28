@@ -1,5 +1,6 @@
 use super::{square::SquareWave, triangle::TriangleWave, noise::Noise};
 
+const CPU_FREQ: f64 = 1_789_773.0;
 /// NES Audio Processing Unit
 /// 
 /// for more info:
@@ -9,6 +10,7 @@ pub struct APU {
     clock: u64,
     frame_counter: usize,
     frame_sequence: u8,
+    cycles_since_sample: f64,
     pub volume: f32,
     pub pulse1: SquareWave,
     pub pulse2: SquareWave,
@@ -18,6 +20,7 @@ pub struct APU {
 impl Default for APU {
     fn default() -> Self {
         Self {
+            cycles_since_sample: 0.0,
             clock: 0,
             frame_counter: 0,
             frame_sequence: 0,
@@ -98,6 +101,27 @@ impl APU {
 
         self.triangle.step();
     }
+    
+    pub fn tick(&mut self, cycles: u8, sample_rate: u32, fullness: f64) -> Option<f32> {
+        self.cycles_since_sample += cycles as f64;
+
+        let rate_adjustment = if fullness < 0.4 {
+            0.98
+        } else if fullness > 0.6 {
+            1.02
+        } else {
+            1.0
+        };
+
+        let cycles_per_sample = (CPU_FREQ / sample_rate as f64) * rate_adjustment;
+
+        if self.cycles_since_sample >= cycles_per_sample {
+            self.cycles_since_sample -= cycles_per_sample;
+            return Some(self.get_sample());
+        }
+        None
+    }
+
 
     pub fn get_sample(&mut self) -> f32 {
         let p1 = self.pulse1.get_amplitude();
