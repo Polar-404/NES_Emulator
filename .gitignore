@@ -9,3 +9,4 @@ nestest.log
 diff_output.txt
 src/nestest_output.log
 .vscode/launch.json
+flamegraph.svg

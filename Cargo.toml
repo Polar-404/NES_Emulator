@@ -21,4 +21,3 @@ debug-assertions = true
 
 [profile.release]
 lto = "fat"
-debug = true

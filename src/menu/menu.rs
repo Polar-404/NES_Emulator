@@ -87,7 +87,7 @@ pub fn render_pause_menu(emu: &mut EmulatorInstance, custom_skin: Option<&Skin>)
             if widgets::Button::new("CONTINUE")
                 .position(vec2(x_centered, 40.0 * res))
                 .size(vec2(btn_w, btn_h))
-                .ui(ui) 
+                .ui(ui)
             {
                 emu.is_paused = false;
             }
@@ -95,11 +95,14 @@ pub fn render_pause_menu(emu: &mut EmulatorInstance, custom_skin: Option<&Skin>)
             ui.label(Some(vec2(x_centered - (30.0 * res), 115.0 * res)), "AUDIO SETTINGS:");
             
             let slider_w = win_w - (40.0 * res);
+
             widgets::Group::new(hash!(), vec2(slider_w, 40.0 * res))
                 .position(vec2(30.0 * res, 125.0 * res))
                 .ui(ui, |ui| {
                     ui.slider(hash!(), "VOL", 0.0..2.0, &mut emu.cpu.bus.apu.volume);
-                });
+                }
+            );
+
             let volume = emu.cpu.bus.apu.volume;
             ui.label(Some(vec2(40.0 * res, 130.0 * res)), format!("{}%", (volume * 100.0).round()).as_str());
 
@@ -110,7 +113,8 @@ pub fn render_pause_menu(emu: &mut EmulatorInstance, custom_skin: Option<&Skin>)
             {
                 return_to_menu = true;
             }
-        });
+        }
+    );
     
     root_ui().pop_skin();
     return_to_menu

@@ -1,5 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use ringbuf::{HeapRb, traits::{Producer, Consumer, Split}};
+use ringbuf::{HeapRb, traits::{Consumer, Split}};
 
 pub struct AudioOutput {
     pub producer: ringbuf::HeapProd<f32>,

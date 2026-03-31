@@ -1,6 +1,6 @@
-use std::{fmt::Error, io, path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
 
-use macroquad::{prelude::*, ui::{hash, root_ui, widgets}};
+use macroquad::prelude::*;
 use arboard::Clipboard;
 use sysinfo::{System, Pid};
 
@@ -24,9 +24,6 @@ extern crate bitflags;
 
 
 const MULTIPLY_RESOLUTION: i32 = 2;
-
-const DEFAULT_GAME_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/NES_GAMES/Mario/Super Mario Bros. (World).nes");
-const DEFAULT_GAME_NAME: &str = "Super Mario Bros. (World)";
 
 struct PerfomanceStats {
     sys: System,
@@ -80,7 +77,6 @@ struct EmulatorInstance {
 } impl EmulatorInstance {
     fn new(game_path: PathBuf) -> Result<EmulatorInstance, Box<dyn std::error::Error>> {
         let mapper = memory::bus::load_rom_from_file(Path::new(game_path.as_path()))?;
-        
         let mut cpu = CPU::new(mapper);
         
         cpu.reset_interrupt();
@@ -148,8 +144,7 @@ struct EmulatorInstance {
                 self.cached_debug_text.push(format!("PPUCTRL: {:#010b} ({:#04x})", self.cpu.bus.ppu.ctrl.bits(), self.cpu.bus.ppu.ctrl.bits()));
                 self.cached_debug_text.push(format!("PPUMASK: {:#010b} ({:#04x})", self.cpu.bus.ppu.mask, self.cpu.bus.ppu.mask));
                 self.cached_debug_text.push(format!("PPUSTATUS: {:#010b} ({:#04x})", self.cpu.bus.ppu.status.bits(), self.cpu.bus.ppu.status.bits()));
-                self.cached_debug_text.push(format!("TempVRAM: {:#06x}", self.cpu.bus.ppu.t.addr));
-                self.cached_debug_text.push(format!("VRAM: {:#06x}", self.cpu.bus.ppu.t.addr));
+                self.cached_debug_text.push(format!("VRAM: {:#06x} | T-VRAM: {:#06x}", self.cpu.bus.ppu.v.addr, self.cpu.bus.ppu.t.addr));
                 self.cached_debug_text.push(format!("PPU Cycle: {} | Scanline: {}", self.cpu.bus.ppu.cycle, self.cpu.bus.ppu.scanline));
                 self.cached_debug_text.push(format!("Frame Complete: {:?}", self.cpu.bus.ppu.frame_complete));
             }
@@ -199,9 +194,11 @@ async fn main() {
     let mut state = EmulatorState::Menu;
     let mut path_buffer = String::new();
 
-    let frame_time = std::time::Duration::from_secs_f64(1.0/60.0);
-    let mut frame_deadline = std::time::Instant::now();
-    let skin = create_customized_skin(MULTIPLY_RESOLUTION as f32);
+    let frame_time: std::time::Duration = std::time::Duration::from_secs_f64(1.0/60.0);
+    let mut frame_deadline: std::time::Instant = std::time::Instant::now();
+    let skin: macroquad::ui::Skin = create_customized_skin(MULTIPLY_RESOLUTION as f32);
+
+    let mut smoothed_fps = 60.0;
 
     async fn rungame(emulator: &mut EmulatorInstance, audio: &mut Option<(AudioOutput, u32)>) {
 
@@ -246,33 +243,27 @@ async fn main() {
             emulator.cpu.bus.ppu.color_palette.cycle_palettes();
         }
 
-        draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
-        emulator.show_debug_info();
     }
 
     loop {
         match &mut state {
+            // TODO implement more 'Menu' funcionalities
             EmulatorState::Menu => {
                 clear_background(DARKBLUE);
 
-                //USER INPUT
-                let default_game_message = format!("Pressione 1 para carregar o jogo padrão ({})", DEFAULT_GAME_NAME);
-                draw_text( &default_game_message, 20.0, 50.0, 30.0, WHITE);
-                draw_text("Pressione '2' para digitar outro caminho.", 20.0, 120.0, 30.0, WHITE);
-
-                if is_key_pressed(KeyCode::Key1) {
-                    println!("Iniciando jogo Padrão");
-                    state = EmulatorState::Loading { game_path: PathBuf::from(DEFAULT_GAME_FILE) }
-                } else if is_key_pressed(KeyCode::Key2) {
-                    while get_char_pressed().is_some() { }
-
+                draw_text("Press any key to continue", 20.0, 120.0, 30.0, WHITE);
+                if get_last_key_pressed().is_some() {
                     state = EmulatorState::TypingPath;
+                    path_buffer.clear();
+
+                    // drains the charactere queue so it doesnt enter the path_buffer
+                    while get_char_pressed().is_some() {}
                 }
             }
             EmulatorState::TypingPath => {
                 clear_background(DARKBLUE);
 
-                draw_text("Cole ou digite o caminho do arquivo:", 20.0, 50.0, 40.0, BLACK);
+                draw_text("Insert the game file path (.nes file):", 20.0, 50.0, 40.0, BLACK);
 
                 while let Some(c) = get_char_pressed() {
                 // filtel control characters
@@ -308,7 +299,7 @@ async fn main() {
 
             EmulatorState::Loading { game_path } => {
                 draw_text("CARREGANDO...", 200.0, 200.0, 50.0, YELLOW);
-                
+
                 let emu_instance = match EmulatorInstance::new(game_path.to_path_buf()) {
                     Ok(emu) => emu,
                     Err(err) => {
@@ -366,6 +357,10 @@ async fn main() {
 
                 if !emulator_instance.is_paused {
                     rungame(emulator_instance, audio).await;
+
+                    smoothed_fps = (smoothed_fps * 0.9) + (get_fps() as f32 * 0.1);
+                    draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
+                    emulator_instance.show_debug_info();
                 } else {
                     if render_pause_menu(emulator_instance, Some(&skin)) {
                         state = EmulatorState::Menu
