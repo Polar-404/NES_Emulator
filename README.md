@@ -111,6 +111,13 @@ As this is an ongoing learning project, several areas still need improvement:
     
 - [ ] **More Palettes:** Implement the ability for the user to insert their own palettes via interface and/or a designated folder with  `.pal` files (maybe even `.hex` files).
 
+- [ ] **Custom Graphics Pipeline:** Transition from Macroquad to OpenGL/Glow for
+    - lower input latency
+    - better frame synchronization.
+    - Custom CRT/NTSC shaders.
+    
+- [ ] **WebAssembly (WASM):** Browser-based emulation — play directly without installing anything.
+
 ---
 ## 🙏 Acknowledgments & References
 
