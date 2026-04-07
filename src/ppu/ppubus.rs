@@ -8,8 +8,6 @@ pub struct PPUBUS {
     palette_ram: [u8; 0x20],
     vram: [u8; 0x0800], 
     pub mapper: Rc<RefCell<Box<dyn Mapper>>>, // 2KB VRAM
-
-    pub last_read_palette: u8
 }
 impl PPUBUS {
     pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> PPUBUS {
@@ -17,7 +15,6 @@ impl PPUBUS {
             palette_ram: [0; 0x20],
             vram: [0; 0x0800],
             mapper,
-            last_read_palette: 0
         }
     }
 
@@ -51,6 +48,18 @@ impl PPUBUS {
     pub fn read_ppubus(&mut self, addr: u16) -> u8 {
         let addr =  addr & 0x3FFF;
         match addr {
+            //minor optimzation ('fast-pathing' the palette since its the most common reading)
+            0x3F00..=0x3FFF => {
+                //mirroring the last addr of the palletes
+                let mut palette_addr = (addr & 0x1F) as usize;
+
+                if palette_addr & 0x13 == 0x10 {
+                    palette_addr &= 0x0F;
+                }
+                
+                self.palette_ram[palette_addr]
+                
+            }
 
             0..=0x1FFF => {
                 self.mapper.borrow().read_chr(addr)
@@ -58,19 +67,6 @@ impl PPUBUS {
             //VRAM (or nametable)
             0x2000..=0x3EFF  => {
                 self.read_vram(addr)
-            }
-            0x3F00..=0x3FFF => {
-                //mirroring the last addr of the palletes
-                let mut palette_addr = (addr & 0x1F) as usize;
-
-                if palette_addr >= 0x10 && palette_addr % 4 == 0 {
-                    palette_addr -= 0x10;
-                }
-
-                self.last_read_palette = self.palette_ram[palette_addr];
-                
-                self.palette_ram[palette_addr]
-                
             }
 
             _ => {

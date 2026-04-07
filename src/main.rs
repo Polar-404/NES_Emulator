@@ -109,10 +109,10 @@ struct EmulatorInstance {
     }    
     pub fn show_debug_info(&mut self) {
         if self.show_debug_info {
-            let pos_x: f32 = 520.0 * MULTIPLY_RESOLUTION as f32; // Posição X para informações de depuração
-            let mut pos_y: f32 = 30.0; // Posição Y inicial
-            let line_height = 30.0; // Altura da linha para espaçamento
-            let font_size = 30.0; // Tamanho da fonte
+            let pos_x: f32 = 520.0 * MULTIPLY_RESOLUTION as f32;
+            let mut pos_y: f32 = 30.0;
+            let line_height = 30.0;
+            let font_size = 30.0;
 
             self.debug_frame_counter = (self.debug_frame_counter + 1) % 4;
 
@@ -122,24 +122,24 @@ struct EmulatorInstance {
 
                 self.cached_debug_text.clear();
 
-                // Geral
+                // general info
                 self.cached_debug_text.push(format!("Vol: {:.0}%", self.cpu.bus.apu.volume * 100.0));
                 self.cached_debug_text.push(format!("CPU: {:.1}% | Thread: {:.1}%", self.stats.cpu_usage, self.stats.main_emu_thread));
                 self.cached_debug_text.push(format!("RAM: {:.2} MB", self.stats.memory_usage_mb));
 
-                // Espaçamento vazio (opcional, para manter o layout original)
+                // empty space
                 self.cached_debug_text.push(String::new());
 
-                // CPU Info
+                // cpu info
                 self.cached_debug_text.push(format!("STATUS: {}", CPU::format_cpu_status(self.cpu.status.bits())));
                 self.cached_debug_text.push(format!("PC: {:#06x}", self.cpu.program_counter));
                 self.cached_debug_text.push(format!("CYCLES: {:?}", self.cpu.cycles));
                 self.cached_debug_text.push(format!("A: {:#04x} | X: {:#04x} | Y: {:#04x}", self.cpu.register_a, self.cpu.register_x, self.cpu.register_y));
 
-                // Espaçamento
+                // empty space
                 self.cached_debug_text.push(String::new());
 
-                // PPU Info
+                // ppu info
                 self.cached_debug_text.push(String::from("PPU INFO:"));
                 self.cached_debug_text.push(format!("PPUCTRL: {:#010b} ({:#04x})", self.cpu.bus.ppu.ctrl.bits(), self.cpu.bus.ppu.ctrl.bits()));
                 self.cached_debug_text.push(format!("PPUMASK: {:#010b} ({:#04x})", self.cpu.bus.ppu.mask, self.cpu.bus.ppu.mask));
@@ -251,7 +251,7 @@ async fn main() {
             EmulatorState::Menu => {
                 clear_background(DARKBLUE);
 
-                draw_text("Press any key to continue", 20.0, 120.0, 30.0, WHITE);
+                draw_text("Press any key to continue", 20.0, 40.0, 30.0, WHITE);
                 if get_last_key_pressed().is_some() {
                     state = EmulatorState::TypingPath;
                     path_buffer.clear();
@@ -294,7 +294,7 @@ async fn main() {
 
                 let display_text = format!("{}_", path_buffer);
                 draw_text(&display_text, 20.0, 100.0, 30.0, YELLOW);
-                draw_text("Pressione ENTER para confirmar ou ESC para cancelar", 20.0, 150.0, 40.0, BLACK);
+                draw_text("Press ENTER to continue or ESC to cancel", 20.0, 150.0, 40.0, BLACK);
             }
 
             EmulatorState::Loading { game_path } => {

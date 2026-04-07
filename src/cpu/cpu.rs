@@ -1,8 +1,5 @@
 // The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
-// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator.
-
-//though by now i've implemented the ppu nmi/vblank and other shenanigans here, maybe it's not a simple 6502 anymore, I can go back look the old git commits...
-//or maybe in the future I can look for another way around to implement the ppu here
+// Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator. (except by the BUS, and NMI)
 
 use crate::cpu::opcodes;
 use crate::memory::bus::BUS; 
