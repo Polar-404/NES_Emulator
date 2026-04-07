@@ -1,0 +1,10 @@
+* text=auto
+
+*.rs text
+
+*.nes binary
+*.bin binary
+*.chr binary
+*.sav binary
+
+Cargo.lock linguist-generated=true
