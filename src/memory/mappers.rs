@@ -42,19 +42,21 @@ pub trait Mapper {
 
 //---------------- MAPPERS LIST ----------------
 
+
+// TO DO ADD DOCUMENTATION
 pub struct InesMapper000 {
-    pub prg_rom: Vec<u8>,
-    pub chr_rom: Vec<u8>,
-    pub prg_ram: Vec<u8>,
+    pub prg_rom: Box<[u8]>,
+    pub chr_rom: Box<[u8]>,
+    pub prg_ram: Box<[u8]>,
     pub mirroring: Mirroring
 }
 
 impl InesMapper000 {
-    pub fn new(prg_rom_data: Vec<u8>, chr_rom_data: Vec<u8>, mirroring: Mirroring) -> Self {
+    pub fn new(prg_rom_data: Box<[u8]>, chr_rom_data: Box<[u8]>, mirroring: Mirroring) -> Self {
         InesMapper000 {
             prg_rom: prg_rom_data,
             chr_rom: chr_rom_data,
-            prg_ram: vec![0; 8192],
+            prg_ram: vec![0; 8192].into_boxed_slice(),
             mirroring: mirroring
         }
     }
@@ -116,29 +118,30 @@ impl Mapper for InesMapper000 {
 
 }
 
+// TO DO ADD DOCUMENTATION
 pub struct InesMapper001 {
-    prg_rom: Vec<u8>,
-    chr_rom: Vec<u8>,
-    prg_ram: Vec<u8>,
+    prg_rom: Box<[u8]>,
+    chr_rom: Box<[u8]>,
+    prg_ram: Box<[u8]>,
 
-    chr_ram: Vec<u8>,
+    chr_ram: Box<[u8]>,
 
     shift_register: u8,
     shift_counter: u8,
     
-    control: u8,      // Configura mirroring e tamanhos de banco
-    chr_bank_0: u8,   // Banco CHR atual (pode ser dividido em dois de 4KB)
-    chr_bank_1: u8,   // Banco CHR secundário
-    prg_bank: u8,     // Banco PRG atual (16KB)
+    control: u8,
+    chr_bank_0: u8,
+    chr_bank_1: u8,
+    prg_bank: u8,
 }
 impl InesMapper001 {
-    pub fn new(prg_rom: Vec<u8>, chr_rom: Vec<u8>) -> Self {
-        let chr_ram = if chr_rom.is_empty() { vec![0; 8192] } else { vec![] };
+    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>) -> Self {
+        let chr_ram = if chr_rom.is_empty() { vec![0; 8192].into() } else { vec![].into() };
         
         Self {
             prg_rom,
             chr_rom,
-            prg_ram: vec![0; 8192], // $6000-$7FFF
+            prg_ram: vec![0; 8192].into_boxed_slice(), // $6000-$7FFF
             chr_ram,
             
             shift_register: 0x10, // O MMC1 starts with 1 at his fourth bit
@@ -181,7 +184,7 @@ impl InesMapper001 {
             _ => unreachable!()
         }
     }
-    ///auxiliar fn to calculate the CHR addr, since it can be changed in entire blocks of 8kb
+    ///auxiliary fn to calculate the CHR addr, since it can be changed in entire blocks of 8kb
     /// or in 2 separated blocks of 4kb
     fn chr_addr(&self, addr: u16) -> usize {
         let chr_mode = (self.control >> 4) & 1;
@@ -285,3 +288,44 @@ impl Mapper for InesMapper001 {
         }
     }
 }
+
+
+/// http://nesdev.org/wiki/MMC3
+/// 
+/// ### BANKS
+/// 
+/// CPU **$6000-$7FFF** 8 KB PRG RAM bank (optional)
+/// 
+/// CPU **$8000-$9FFF** (or $C000-$DFFF): 8 KB switchable PRG ROM bank
+/// 
+/// CPU **$A000-$BFFF** 8 KB switchable PRG ROM bank
+/// 
+/// CPU **$C000-$DFFF** (or $8000-$9FFF): 8 KB PRG ROM bank, fixed to the second-last bank
+/// 
+/// CPU **$E000-$FFFF** 8 KB PRG ROM bank, fixed to the last bank
+/// 
+/// PPU **$0000-$07FF** (or $1000-$17FF): 2 KB switchable CHR bank
+/// 
+/// PPU **$0800-$0FFF** (or $1800-$1FFF): 2 KB switchable CHR bank
+/// 
+/// PPU **$1000-$13FF** (or $0000-$03FF): 1 KB switchable CHR bank
+/// 
+/// PPU **$1400-$17FF** (or $0400-$07FF): 1 KB switchable CHR bank
+/// 
+/// PPU **$1800-$1BFF** (or $0800-$0BFF): 1 KB switchable CHR bank
+/// 
+/// PPU **$1C00-$1FFF** (or $0C00-$0FFF): 1 KB switchable CHR bank
+
+pub struct InesMapper004 {
+
+}
+
+impl InesMapper004 {
+    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>) -> Self {
+        InesMapper004 {  }
+    }
+}
+
+//impl Mapper for InesMapper004 {
+//
+//}

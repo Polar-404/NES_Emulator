@@ -1,5 +1,3 @@
-use core::panic;
-use std::fmt::Error;
 use std::path::Path;
 
 use crate::apu::apu::APU;
@@ -28,14 +26,14 @@ pub struct BUS {
     ///Unmapped. Available for cartridge use.
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
-    mapper: Rc<RefCell<Box<dyn Mapper>>>,
+    mapper: Rc<RefCell<dyn Mapper>>,
     pub ppu: PPU,
     pub apu: APU,
 }
 
 impl BUS {
     
-    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         BUS {
             cpu_memory: [0; 0x0800],
             apu_and_io_functionality: [0; 0x08],
@@ -175,18 +173,16 @@ impl BUS {
 
 #[inline]
 /// fn to reduce code repetition
-fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<Box<dyn Mapper>>>
+fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<dyn Mapper>>
 where T: Mapper + 'static {
     Rc::new(
         RefCell::new(
-            Box::new(
-                mapper
-            )
+            mapper
         )
     )
 }
 
-pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, Box<dyn std::error::Error>> {
+pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dyn std::error::Error>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
     let rom_data = std::fs::read(path)?;
@@ -209,10 +205,10 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, B
 
     let prg_rom_start = 16 + if has_trainer {512} else {0}; //the header size is 16 bytes
     let prg_rom_end = prg_rom_start + program_size; 
-    let prg_rom_data = rom_data[prg_rom_start..prg_rom_end].to_vec(); // mapping the actual game
+    let prg_rom_data = rom_data[prg_rom_start..prg_rom_end].into(); // mapping the actual game
     
     //The CHR ROM starts after the PRG ROM
-    let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].to_vec();
+    let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].into();
     
     //mirroring type
     let mirroring_byte = rom_data[6] & 0b0000_0001;

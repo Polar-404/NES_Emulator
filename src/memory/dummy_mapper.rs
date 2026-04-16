@@ -12,7 +12,7 @@ pub struct TestMapper {
 
 impl TestMapper {
     #[allow(unused)] // test only mapper
-    pub fn new(program: Vec<u8>) -> Rc<RefCell<Box<dyn Mapper>>> {
+    pub fn new(program: Vec<u8>) -> Rc<RefCell<dyn Mapper>> {
         let ram = [0; 0x0800];
         
         let mut prg_rom_vec = vec![0; 0x8000];
@@ -32,11 +32,11 @@ impl TestMapper {
 
         Rc::new(
             RefCell::new(
-                Box::new(Self {
+                Self {
                     ram,
                     prg_rom: prg_rom_vec,
                     chr_rom,
-        })))
+        }))
     }
 }
 

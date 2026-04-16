@@ -93,7 +93,7 @@ pub struct PPU {
 
 
 impl PPU {
-    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         PPU { 
             cycle: 0, 
             scanline: 0, 

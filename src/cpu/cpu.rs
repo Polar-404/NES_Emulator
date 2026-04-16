@@ -86,7 +86,7 @@ pub enum AddressingMode {
 }
 
 impl CPU {
-    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
