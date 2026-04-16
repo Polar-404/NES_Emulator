@@ -10,6 +10,11 @@ use ringbuf::traits::{Observer as _, Producer as _};
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
 
+pub struct TickResult {
+    pub nmi: bool,
+    pub irq: bool,
+}
+
 pub struct BUS {
 
     //[https://www.nesdev.org/wiki/CPU_memory_map]
@@ -82,11 +87,13 @@ impl BUS {
     #[inline(always)]
     pub fn mem_write(&mut self, addr: u16, val: u8) -> bool {
         match addr {
+            //cpu ram
             0x0000..=0x1FFF => {
                 let addr = addr & 0x07FF;
                 self.cpu_memory[addr as usize] = val;
                 false
             }
+            //ppu registers
             0x2000..=0x3FFF => {
                 let addr = addr & 0x0007;
                 if self.ppu.write_registers(addr, val) {
@@ -94,6 +101,7 @@ impl BUS {
                 }
                 false
             }
+            // dma, controls and audio
             0x4000..=0x4017 => {
 
                 if addr == 0x4014 {
@@ -116,11 +124,13 @@ impl BUS {
                 self.apu.write_register(addr, val);
                 false
             }
+            // *currently disabled* apu and yo functionality
             0x4018..=0x401F => {
                 let addr = addr - 0x4018;
                 self.apu_and_io_functionality[addr as usize] = val;
                 false
             }
+            //cartridge
             0x4020..=0xFFFF => {
                 //passing it's real address(without subtraction) to the mapper to take care of it
                 self.mapper.borrow_mut().write(addr, val);
@@ -142,17 +152,25 @@ impl BUS {
         self.mem_write(pos + 1, hi);
     }
 
-    pub fn tick(&mut self, cycles: u8) -> bool {
+    pub fn tick(&mut self, cycles: u8) -> TickResult {
         self.ppu.tick(cycles as u16 * 3);
         for _ in 0..cycles {
             self.apu.step();
         }
 
+        let mut tick_result = TickResult {
+            nmi: false,
+            irq: false,
+        };
+
         if self.ppu.nmi_occurred {
             self.ppu.nmi_occurred = false;
-            return true;
+            tick_result.nmi = true;
         }
-        false
+
+        tick_result.irq = self.mapper.borrow().irq_pending();
+
+        tick_result
     }
 
     pub fn sync_audio(&mut self, cycles: u8, audio: &mut (AudioOutput, u32)) {

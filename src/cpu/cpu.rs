@@ -780,7 +780,9 @@ impl CPU {
 
         self.cycles += opcode.cycles as u64;
         
-        if self.bus.tick(opcode.cycles) {
+        let tick_result =  self.bus.tick(opcode.cycles);
+
+        if tick_result.nmi {
             self.vblank = true;
         }
 

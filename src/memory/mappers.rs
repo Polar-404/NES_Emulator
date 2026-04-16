@@ -38,6 +38,11 @@ pub trait Mapper {
     fn write_chr(&mut self, addr: u16, val: u8);
 
     fn mirroring(&self) -> Mirroring;
+
+    //optional (depends on the cartridge)
+    fn irq_pending(&self) -> bool { false }
+    fn acknowledge_irq(&mut self) {}
+    fn notify_ppu_address(&mut self, _addr: u16) {}
 }
 
 //---------------- MAPPERS LIST ----------------
@@ -220,9 +225,9 @@ impl Mapper for InesMapper001 {
                 self.prg_ram[(addr - 0x6000) as usize] = val;
 
                 if addr == 0x6000 && val != 0x80 {
-                    // Lê a string do endereço $6004 em diante até achar um byte nulo (0x00)
+
                     let mut text = String::new();
-                    let mut i = 4; // Começa no índice 4 (que equivale a $6004)
+                    let mut i = 4;
                     
                     while i < self.prg_ram.len() && self.prg_ram[i] != 0 {
                         text.push(self.prg_ram[i] as char);
@@ -317,15 +322,75 @@ impl Mapper for InesMapper001 {
 /// PPU **$1C00-$1FFF** (or $0C00-$0FFF): 1 KB switchable CHR bank
 
 pub struct InesMapper004 {
+    prg_rom: Box<[u8]>,
+    chr_rom: Box<[u8]>,
+    prg_ram: Box<[u8]>,
+    chr_ram: Box<[u8]>,
 
+    bank_registers: [u8; 8],
+    bank_select: u8, 
+
+    irq_counter: u8,
+    irq_latch: u8,
+    irq_enabled: bool,
+    irq_pending: bool,    // <- flag que o bus vai ler
+    irq_reload: bool,     // força recarga no próximo clock A12
 }
 
 impl InesMapper004 {
     pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>) -> Self {
-        InesMapper004 {  }
+        let chr_ram = if chr_rom.is_empty() { vec![0; 8192].into() } else { vec![].into() };
+
+        InesMapper004 { 
+            prg_rom,
+            chr_rom,
+            prg_ram: vec![0; 8192].into_boxed_slice(),
+            chr_ram,
+
+            bank_registers: [0; 8],
+            bank_select: 0,
+
+            //IRQ
+            irq_counter: 0,
+            irq_latch: 0,
+
+            irq_enabled: false,
+            irq_pending: false,
+            irq_reload: false,  
+        }
     }
 }
 
-//impl Mapper for InesMapper004 {
-//
-//}
+impl Mapper for InesMapper004 {
+    fn read(&self, addr: u16) -> u8 {
+        todo!()
+    }
+
+    fn write(&mut self, addr: u16, val: u8) {
+        todo!()
+    }
+
+    fn read_chr(&self, addr: u16) -> u8 {
+        todo!()
+    }
+
+    fn write_chr(&mut self, addr: u16, val: u8) {
+        todo!()
+    }
+
+    fn mirroring(&self) -> Mirroring {
+        todo!()
+    }
+
+    fn acknowledge_irq(&mut self) {
+        todo!()
+    }
+
+    fn irq_pending(&self) -> bool {
+        todo!()
+    }
+
+    fn notify_ppu_address(&mut self, _addr: u16) {
+        todo!()
+    }
+}
