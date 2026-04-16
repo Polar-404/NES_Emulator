@@ -1,22 +1,21 @@
-# NES Emulator 🎮
+# NES Emulator
 
 **A Nintendo Entertainment System (NES) emulator built in Rust.**
 
 ![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white) ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
 ---
-## 📸 Showcase
+## Showcase
 
 <p align="center"> <img src="https://github.com/user-attachments/assets/5d8fd168-6763-4f93-9af5-1f9c4a570b58" alt="SMB Gameplay with Debug Info" width="600" /> </p>
 
----
 
 > [!NOTE] 
-> This project was created purely as a hobby, a personal challenge, and an opportunity to practice low-level programming and system architecture in Rust. So for the foreseeable future it is not intended to compete with established emulators but rather serves as a proof of concept and a deep learning experience regarding NES hardware.
+> This project was created purely as a hobby, a personal challenge, and an opportunity to practice low-level programming and system architecture in Rust. So for the foreseeable future it is not intended to compete with established emulators but rather serves as a proof of concept and a deep learning experience regarding low-level programming and the NES hardware.
 
 
 ---
-## 🚀 How to Run
+## How to Run
 
 Make sure you have [Rust and Cargo](https://www.rust-lang.org/tools/install) installed on your system.
 
@@ -32,7 +31,7 @@ cd NES_Emulator
 cargo run --release
 ```
 
-## 🎮 Controls
+## Controls
 
 | NES Button      | Primary |   Secondary   |
 | :-------------- | :-----: | :-----------: |
@@ -53,7 +52,7 @@ cargo run --release
 * **Paste ROM Path:** `Ctrl + V`
 
 ---
-## ✨ Current Features
+## Current Features
 
 - Ricoh 2A03 (6502) CPU (including indirect JMP bug support).
     
@@ -71,7 +70,7 @@ cargo run --release
         
 
 ---
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **[Rust](https://www.rust-lang.org/):** Main language used for the project.
     
@@ -87,7 +86,7 @@ cargo run --release
     
 
 ---
-## 🚧 Roadmap / To-Do
+## Roadmap / To-Do
 
 As this is an ongoing learning project, several areas still need improvement:
 
@@ -119,7 +118,7 @@ As this is an ongoing learning project, several areas still need improvement:
 - [ ] **WebAssembly (WASM):** Browser-based emulation — play directly without installing anything.
 
 ---
-## 🙏 Acknowledgments & References
+## Acknowledgments & References
 
 This project would not have been possible without the incredible emulation community and the educational resources available online. Special thanks to:
 
