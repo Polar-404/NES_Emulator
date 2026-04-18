@@ -36,7 +36,9 @@ impl TestMapper {
                     ram,
                     prg_rom: prg_rom_vec,
                     chr_rom,
-        }))
+                }
+            )
+        )
     }
 }
 

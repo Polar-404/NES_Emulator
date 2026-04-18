@@ -44,8 +44,9 @@ pub struct CPU {
     pub register_x: u8,
     pub register_y: u8,
 
-    ///Instructions that save or restore the flags map them to bits in the architectural 'P' register as follows:
+    /// **Instructions that save or restore the flags map them to bits in the architectural 'P' register as follows:**
     ///
+    ///```text 
     ///7  bit  0
     ///---- ----
     ///NV1B DIZC
@@ -58,6 +59,7 @@ pub struct CPU {
     ///||+------- (No CPU effect; always pushed as 1)
     ///|+-------- Overflow
     ///+--------- Negative
+    ///```
     pub status: CpuFlags,
     pub program_counter: u16,
     pub stack_pointer: u8, // SP
@@ -173,6 +175,29 @@ impl CPU {
 
         self.vblank = false; // Limpa a flag vblank
 
+    }
+
+    pub fn trigger_cpu_irq(&mut self) {
+        if self.status.contains(CpuFlags::INTERRUPT_DISABLE) {
+            return;
+        }
+
+        self.stack_push_u16(self.program_counter);
+
+        let mut status = self.status.bits();
+        status &= !0x10;
+        status |=  0x20;
+
+        self.stack_push(status);
+
+        self.status.insert(CpuFlags::INTERRUPT_DISABLE);
+
+        let lo = self.bus.mem_read(0xFFFE);
+        let hi = self.bus.mem_read(0xFFFF);
+        self.program_counter = ((hi as u16) << 8) | lo as u16;
+
+        //usually 7 on real hardware
+        self.cycles += 7;
     }
 
     /////writes the program counter to
@@ -768,6 +793,10 @@ impl CPU {
 
         if self.vblank {
             self.trigger_cpu_nmi();
+        }
+
+        if self.bus.mapper.borrow_mut().irq_pending() || !self.status.contains(CpuFlags::INTERRUPT_DISABLE) {
+            self.trigger_cpu_irq();
         }
 
         let code = self.bus.mem_read(self.program_counter);

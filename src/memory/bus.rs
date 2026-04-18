@@ -31,7 +31,7 @@ pub struct BUS {
     ///Unmapped. Available for cartridge use.
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
-    mapper: Rc<RefCell<dyn Mapper>>,
+    pub mapper: Rc<RefCell<dyn Mapper>>,
     pub ppu: PPU,
     pub apu: APU,
 }
@@ -189,7 +189,6 @@ impl BUS {
     //}
 }
 
-#[inline]
 /// fn to reduce code repetition
 fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<dyn Mapper>>
 where T: Mapper + 'static {
@@ -200,6 +199,51 @@ where T: Mapper + 'static {
     )
 }
 
+/// Loads an iNES ROM file and returns the appropriate "mapper" for the cartridge.
+/// 
+/// The "Mappers" in this codebase are a customized 'struct/data format' with all the data of the cartridge on it
+/// (which ik isn't the real meaning of an actual NES mapper)
+/// organized in a format that this emulator can read
+///
+/// Parses the 16-byte iNES header to extract ROM layout information, slices the
+/// binary data into PRG and CHR regions, determines the mirroring mode, and
+/// constructs the mapper instance corresponding to the cartridge's mapper ID.
+///
+/// ### iNES Header Format
+///
+/// ```text
+/// Offset  Size  Description
+/// ──────────────────────────────────────────────────────────────────────
+/// 0–3     4     Magic: $4E $45 $53 $1A ("NES" + MS-DOS EOF marker)
+/// 4       1     PRG ROM size in 16 KB units
+/// 5       1     CHR ROM size in 8 KB units (0 = board uses CHR RAM)
+/// 6       1     Flags 6: [Mapper low nibble | 4-screen | trainer | battery | mirroring]
+/// 7       1     Flags 7: [Mapper high nibble | NES 2.0 | PlayChoice | VS Unisystem]
+/// 8       1     PRG RAM size (rarely used)
+/// 9       1     TV system (rarely used)
+/// 10      1     TV system / PRG RAM presence (unofficial)
+/// 11–15   5     Padding (should be zero)
+///
+/// Flags 6 bit layout:
+///   7 6 5 4   3         2        1          0
+///   ─────────────────────────────────────────
+///   Mapper lo │ 4-screen │ trainer │ battery │ mirroring
+///                                            └─ 0: horizontal arrangement
+///                                               1: vertical arrangement
+/// ```
+///
+/// ### Arguments
+///
+/// * `path` - Path to the `.nes` ROM file.
+///
+/// ### Errors
+///
+/// Returns an error if:
+/// - The file cannot be read.
+/// - The mapper ID extracted from the header is not yet implemented.
+/// - Four-screen mirroring is encountered (currently unimplemented).
+/// 
+/// **For more information about real NES Mappers, go to:** https://www.nesdev.org/wiki/Mapper
 pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dyn std::error::Error>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
@@ -208,6 +252,7 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
 
     let has_trainer = (rom_data[6] & 0b0000_0100) != 0;
 
+    //TODO
     println!("--- ROM HEADER INFO ---");
     println!("Byte 4 (PRG Banks): {}", rom_data[4]);
     println!("Byte 5 (CHR Banks): {}", rom_data[5]);
@@ -243,12 +288,10 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
     }
 
     match mapper_match {
-        0 => {
-            Ok(wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type)))
-        }
-        1 => {
-            Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data)))
-        }
+        0 => Ok(wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
+        1 => Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data))),
+        4 => Ok(wrap_in_pointers(InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type))),
+
         _ => Err(format!("Mapper {} is not supported yet", mapper_match).into())
     }
 }
