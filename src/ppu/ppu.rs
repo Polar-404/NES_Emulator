@@ -69,10 +69,10 @@ pub struct PPU {
     w: bool,       // latch de escrita: false = primeira, true = segunda
 
     // ── Background ────────────────────────────────────────────────
-    bg_next_tile_id:   u8,
-    bg_next_tile_attr: u8,
-    bg_next_tile_lo:   u8,
-    bg_next_tile_hi:   u8,
+    pub bg_next_tile_id:   u8,
+    pub bg_next_tile_attr: u8,
+    pub bg_next_tile_lo:   u8,
+    pub bg_next_tile_hi:   u8,
 
     // ── background shift registers (16 bits = 2 tiles) ────────────
     bg_shift_lo:      u16,
@@ -113,7 +113,7 @@ impl PPU {
             status: PpuStatusFlags::new(),
             data_buffer: 0,
 
-            oam: [0; 0x100],
+            oam: [0xFF; 0x100],
 
             v: PPUAddress::new(),
             t: PPUAddress::new(),
@@ -361,7 +361,9 @@ impl PPU {
         let in_fetch_range = (self.cycle >= 1 && self.cycle <= 256)
         || (self.cycle >= 321 && self.cycle <= 336); // fetch tile range (cycles 1-256 and 321-336)
 
-        if in_fetch_range {
+        let rendering_enabled = self.mask.contains(PpuMaskFlags::EnableBackground) || self.mask.contains(PpuMaskFlags::EnableSprites);
+
+        if in_fetch_range && rendering_enabled {
             self.update_shifters();
 
             match (self.cycle - 1) % 8 {
@@ -383,7 +385,7 @@ impl PPU {
                     self.bg_next_tile_hi = self.ppubus.read_ppubus(addr);
                 }
                 7 => {
-                    if self.mask.contains(PpuMaskFlags::EnableBackground) {
+                    if rendering_enabled {
                         self.v.increment_coarse_x();
                     }
                 } // reads high bit plane (pattern table, bit 1) and increments coarse x
@@ -392,7 +394,7 @@ impl PPU {
         }
 
         // ── end of scanline adjusts ──────────────────────────────────────
-        if self.cycle == 256 && self.mask.contains(PpuMaskFlags::EnableBackground) {
+        if self.cycle == 256 && rendering_enabled {
             self.v.increment_fine_y();
         }
         if self.cycle == 257 {

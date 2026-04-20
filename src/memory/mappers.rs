@@ -353,6 +353,7 @@ pub struct InesMapper004 {
     irq_reload: bool,     // força recarga no próximo clock A12
 
     last_a12: bool,
+    a12_low_counter: u32,
 
     prg_ram_chip_enable: bool,     
     prg_ram_w_protection: bool,
@@ -383,12 +384,13 @@ impl InesMapper004 {
             irq_reload: false,  
 
             last_a12: false,
+            a12_low_counter: 0,
 
             prg_ram_chip_enable: false,
             prg_ram_w_protection: false,
         }
     }
-    pub fn bank_switch(&self, addr: u16) -> usize {
+    fn bank_switch(&self, addr: u16) -> usize {
         let prg_mode = (self.bank_select_register & 0x40) != 0;
         let total_banks = self.prg_rom.len() / 8192;
 
@@ -419,6 +421,43 @@ impl InesMapper004 {
             _ => 0
         }
     }
+
+    fn _get_chr_offset(&self, reg_idx: usize, addr: u16, size_kb: usize) -> usize {
+        let bank = self.bank_registers[reg_idx] as usize;
+        if size_kb == 1 {
+            (bank * 1024) + (addr as usize & 0x03FF)
+        } else{       
+            ((bank & 0xFE) * 1024) + (addr as usize & 0x07FF)
+        }
+    }
+
+    fn bank_switch_chr(&self, addr: u16) -> usize {
+        let chr_mode = self.bank_select_register & 0x80 != 0;
+
+        if !chr_mode {
+            // Mode 0
+            match addr {
+                0x0000..=0x07FF => self._get_chr_offset(0, addr, 2),
+                0x0800..=0x0FFF => self._get_chr_offset(1, addr, 2),
+                0x1000..=0x13FF => self._get_chr_offset(2, addr, 1),
+                0x1400..=0x17FF => self._get_chr_offset(3, addr, 1),
+                0x1800..=0x1BFF => self._get_chr_offset(4, addr, 1),
+                0x1C00..=0x1FFF => self._get_chr_offset(5, addr, 1),
+                _ => 0
+            }
+        } else {
+            // Mode 1
+            match addr {
+                0x0000..=0x03FF => self._get_chr_offset(2, addr, 1),
+                0x0400..=0x07FF => self._get_chr_offset(3, addr, 1),
+                0x0800..=0x0BFF => self._get_chr_offset(4, addr, 1),
+                0x0C00..=0x0FFF => self._get_chr_offset(5, addr, 1),
+                0x1000..=0x17FF => self._get_chr_offset(0, addr, 2),
+                0x1800..=0x1FFF => self._get_chr_offset(1, addr, 2),
+                _ => 0
+            }
+        }
+    }
 }
 
 impl Mapper for InesMapper004 {
@@ -429,12 +468,12 @@ impl Mapper for InesMapper004 {
             }
             0x8000..=0xFFFF => {
                 //calculates the actual offset within the ROM based on the MMC3 registers
-                let absolute_offset = self.bank_switch(addr);
+                let mapper_offset = self.bank_switch(addr);
 
                 // Security/Mirroring: The '%' operator ensures that the index never exceeds
                 // the size of the loaded PRG_ROM, preventing 'out of bounds' panic
                 // if the game requests a non-existent bank, it 'mirrors' it back to the beginning
-                self.prg_rom[absolute_offset % self.prg_rom.len()]
+                self.prg_rom[mapper_offset % self.prg_rom.len()]
             }
             _ => {0}
         }
@@ -443,7 +482,11 @@ impl Mapper for InesMapper004 {
     /// *REGISTERS:* https://www.nesdev.org/wiki/MMC3#Registers
     fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            //https://www.nesdev.org/wiki/MMC3#Registers
+            0x6000..=0x7FFF => {
+                if self.prg_ram_chip_enable && !self.prg_ram_w_protection {
+                    self.prg_ram[(addr - 0x6000) as usize] = val;
+                }
+            }
             0x8000..=0x9FFF => {
                 //even addr selects the bank register
                 if addr % 2 == 0 {
@@ -459,18 +502,18 @@ impl Mapper for InesMapper004 {
                 //Nametable arrangement ($A000-$BFFE, even)
                 if addr % 2 == 0 {
                     if val & 0x01 == 0 {
-                        //nametable arrangement = horizontal
+                        self.mirroring = Mirroring::Horizontal
                     } else {
-                        //nametable arrangement = vertical
+                        self.mirroring = Mirroring::Vertical
                     }
                 }
                 //PRG RAM protect ($A001-$BFFF, odd)
                 else {
                     //Write protection (0: allow writes; 1: deny writes)
-                    self.prg_ram_w_protection = (val & 0b0100_0000) == 0;
+                    self.prg_ram_w_protection = (val & 0b0100_0000) != 0;
 
                     //PRG RAM chip enable (0: disable; 1: enable)
-                    self.prg_ram_chip_enable = (val & 0b1000_0000) == 0;
+                    self.prg_ram_chip_enable = (val & 0b1000_0000) != 0;
                 }
             }
             0xC000..=0xDFFF => {
@@ -480,13 +523,13 @@ impl Mapper for InesMapper004 {
                 }
                 //IRQ reload ($C001-$DFFF, odd)
                 else {
-                    self.irq_counter = (self.irq_counter & 0x00) | self.irq_latch
+                    self.irq_reload = true;
                 }
             }
             0xE000..=0xFFFF => {
                 //IRQ disable ($E000-$FFFE, even)
                 //Writing any value to this register will disable MMC3 interrupts AND acknowledge any pending interrupts.
-                if addr & 2 == 0 {
+                if addr % 2 == 0 {
                     self.irq_enabled = false;
                     self.acknowledge_irq();
                 }
@@ -497,26 +540,36 @@ impl Mapper for InesMapper004 {
                 }
             }
 
-            _ => {
-                unreachable!()
-            }
+            _ => {} //ignores writing
         }
     }
 
     fn read_chr(&self, addr: u16) -> u8 {
-        todo!()
+        let mapper_offset = self.bank_switch_chr(addr);
+
+        if self.chr_rom.is_empty() {
+            self.chr_ram[mapper_offset % self.chr_ram.len()]
+        } else {
+            self.chr_rom[mapper_offset % self.chr_rom.len()]
+        }
     }
 
     fn write_chr(&mut self, addr: u16, val: u8) {
-        todo!()
+        if self.chr_rom.is_empty() {
+            let mapper_offset = self.bank_switch_chr(addr);
+
+            self.chr_ram[mapper_offset % self.chr_ram.len()] = val;
+        }
+        //ignores writing at chr_rom
     }
 
     fn mirroring(&self) -> Mirroring {
         self.mirroring
     }
 
+    #[inline]
     fn acknowledge_irq(&mut self) {
-        todo!()
+        self.irq_pending = false
     }
 
     fn irq_pending(&self) -> bool {
@@ -527,19 +580,27 @@ impl Mapper for InesMapper004 {
     fn notify_ppu_address(&mut self, addr: u16) {
         let a12 = addr & 0x1000 != 0;
 
-        if a12 && !self.irq_enabled {
-            if self.irq_counter == 0 || self.irq_reload {
-                self.irq_counter = self.irq_latch;
-                self.irq_reload = false;
-            } else {
-                self.irq_counter -= 1
+        if !a12 {
+            // Incrementa enquanto a linha estiver baixa
+            self.a12_low_counter += 1;
+        } else {
+            // Só dispara se for uma borda de subida E se a linha ficou baixa o suficiente
+            if !self.last_a12 && self.a12_low_counter >= 3 {
+                
+                if self.irq_counter == 0 || self.irq_reload {
+                    self.irq_counter = self.irq_latch;
+                    self.irq_reload = false;
+                } else {
+                    self.irq_counter -= 1;
+                    if self.irq_counter == 0 && self.irq_enabled {
+                        self.irq_pending = true;
+                    }
+                }
             }
-
-            if self.irq_counter == 0 && self.irq_enabled {
-                self.irq_pending = true;
-            }
+            // Zera o contador porque a linha A12 agora é 1
+            self.a12_low_counter = 0;
         }
-
-        self.last_a12= a12;
+        
+        self.last_a12 = a12;
     }
 }
