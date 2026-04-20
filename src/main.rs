@@ -8,14 +8,14 @@ use crate::{
     cpu::cpu::CPU, 
     memory::joypads::JoyPadButtons,
     apu::audio::AudioOutput,
-    menu::menu::*,
+    ui::menu::*,
 };
 
 mod cpu;
 mod memory;
 mod ppu;
 mod apu;
-mod menu;
+mod ui;
 
 #[macro_use]
 extern crate lazy_static;
@@ -309,6 +309,54 @@ async fn main() {
                         continue;
                     }
                 };
+
+                let mut test_started = false;
+
+                #[cfg(feature = "debug_log")]
+                //let logger = Box::new(ppu_debug::log_ppu (
+                //    Some("ppu_log.txt"),
+                //    500_000,
+                //    {
+                //        let mut loop_counter = 0u32;
+                //        move |cpu: &CPU| {
+                //            if cpu.bus.ppu.frame_complete {
+                //                loop_counter += 1;
+                //            }
+                //            
+                //            cpu.cycles >= 100_000_000 || loop_counter >= 10_000
+                //        }
+                //    }
+                //));
+                let logger = Box::new(cpu_debug::cpu_logger(
+                    Some(".log/blargg_test.txt"),
+                    10000,
+                    move |cpu: &mut CPU| {
+                        let status = cpu.bus.mem_read(0x6000); 
+                        if status == 0x80 {
+                            test_started = true;
+                        }
+
+                        if test_started && status != 0x80 {
+                            let mut text = String::new();
+                            let mut i = 0x6004;
+                            
+                            loop {
+                                let char_val = cpu.bus.mem_read(i);
+                                if char_val == 0 { break; }
+                                text.push(char_val as char);
+                                i += 1;
+                            }
+
+                            println!("--- TEST RESULT ---");
+                            println!("Status Code: {:#04X}", status);
+                            println!("Mensagem: \n{}", text);
+                            println!("--------------------------");
+                            
+                            return true; 
+                        }
+                        false
+                    }
+                ));
 
                 let audio = AudioOutput::new(44100);
 

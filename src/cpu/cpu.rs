@@ -10,8 +10,6 @@ use std::{collections::HashMap};
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use std::io::Write;
-
 bitflags! {
 
     /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
@@ -66,7 +64,9 @@ pub struct CPU {
     pub cycles: u64,
     pub bus: BUS,
     
-    pub vblank: bool
+    pub vblank: bool,
+
+    pub last_opcode: u8
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -99,38 +99,40 @@ impl CPU {
             bus: BUS::new(mapper),
             vblank: false,
             cycles: 0,
+            last_opcode : 0
         }
     }
 
-
-    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> u16 {
+    fn get_oprand_adress(&mut self, mode: &AddressingMode) -> (u16, bool) {
         match mode {
-            AddressingMode::Immediate => self.program_counter, //pega o proximo imediato proximo valor
+            AddressingMode::Immediate => (self.program_counter, false), //pega o proximo imediato proximo valor
             //e joga na memoria (no register A)
 
-            AddressingMode::ZeroPage => self.bus.mem_read(self.program_counter) as u16, //
+            AddressingMode::ZeroPage => (self.bus.mem_read(self.program_counter) as u16, false), //
 
-            AddressingMode::Absolute => self.bus.mem_read_u16(self.program_counter),
+            AddressingMode::Absolute => (self.bus.mem_read_u16(self.program_counter), false),
 
             AddressingMode::ZeroPage_X => {
                 let pos = self.bus.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_x) as u16;
-                addr
+                (addr, false)
             }
             AddressingMode::ZeroPage_Y => {
                 let pos = self.bus.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_y) as u16;
-                addr
+                (addr, false)
             }
             AddressingMode::Absolute_X => {
                 let base = self.bus.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
-                addr
+                let page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+                (addr, page_crossed)
             }
             AddressingMode::Absolute_Y => {
                 let base = self.bus.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
-                addr
+                let page_crossed = (base & 0xFF00) != (addr & 0xFF00);
+                (addr, page_crossed)
             }
             AddressingMode::Indirect_X => {
                 let base = self.bus.mem_read(self.program_counter);
@@ -138,7 +140,7 @@ impl CPU {
                 let ptr: u8 = (base as u8).wrapping_add(self.register_x);
                 let lo = self.bus.mem_read(ptr as u16);
                 let hi = self.bus.mem_read(ptr.wrapping_add(1) as u16);
-                (hi as u16) << 8 | (lo as u16)
+                ((hi as u16) << 8 | (lo as u16), false)
             }
             AddressingMode::Indirect_Y => {
                 let base = self.bus.mem_read(self.program_counter);
@@ -147,12 +149,11 @@ impl CPU {
                 let hi = self.bus.mem_read(base.wrapping_add(1) as u16);
                 let deref_base = (hi as u16) << 8 | (lo as u16);
                 let deref = deref_base.wrapping_add(self.register_y as u16);
-
-                deref
+                let page_crossed = (deref_base & 0xFF00) != (deref & 0xFF00);
+                (deref, page_crossed)
             }
-
             AddressingMode::NoneAddressing => {
-                panic!("mode {:?} is not suported", mode);
+                panic!("tried to 'get_addressing_mode()' from impled addressing instruction, or mode {:?} is not suported", mode);
             }
 
         }
@@ -224,30 +225,42 @@ impl CPU {
 
     ///LDA - Load A
     ///Takes a value at the given location (acording to the addressing mode) then loads it into the accumulator (register A)
-    fn lda(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn lda(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr , page_crossed)= self.get_oprand_adress(mode);
 
         let value = self.bus.mem_read(addr);
         //println!("Lendo valor {:x} do endereço {:x}", value, addr);
 
         self.register_a = value;
         self.update_zero_and_negative_flags(self.register_a);
+
+        if page_crossed { 1 } else { 0 }
     }
     ///LDA - Load X
-    fn ldx(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn ldx(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let val = self.bus.mem_read(addr);
 
         self.register_x = val;
         self.update_zero_and_negative_flags(self.register_x);
+
+        if page_crossed { 1 } else { 0 }
     }
     ///LDA - Load Y
-    fn ldy(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn ldy(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let val = self.bus.mem_read(addr);
 
         self.register_y = val;
         self.update_zero_and_negative_flags(self.register_y);
+
+        if page_crossed { 1 } else { 0 }
     }
     ///TXA e TYA
     fn transfer_to_accumulator(&mut self, register: u8) {
@@ -257,15 +270,21 @@ impl CPU {
 
     ///STA - Store A
     ///stores the accumulator into the target memory addrss
-    fn sta(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn sta(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, _) = self.get_oprand_adress(mode);
         self.bus.mem_write(addr, self.register_a); //o contrario do LDA, ainda usando os mesmos parametros do LDA
         //mas esse escreve o que esta no register na memoria
+
+        0
     }
 
     ///Rotate Left
-    fn rol(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn rol(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, _) = self.get_oprand_adress(mode);
         let mut data = self.bus.mem_read(addr);
         let previous_carry = self.status.contains(CpuFlags::CARRY);
 
@@ -280,6 +299,8 @@ impl CPU {
         }
         self.bus.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
+
+        0
     }
     ///Rotate Left Register A
     fn rol_accumulator(&mut self) {
@@ -300,8 +321,10 @@ impl CPU {
     }
 
     ///ROR - Rotate Right
-    fn ror(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn ror(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, _) = self.get_oprand_adress(mode);
         let mut data = self.bus.mem_read(addr);
         let previous_carry = self.status.contains(CpuFlags::CARRY);
 
@@ -316,6 +339,8 @@ impl CPU {
         }
         self.bus.mem_write(addr, data);
         self.update_zero_and_negative_flags(data);
+
+        0
     }
     ///Rotate Right Register A
     fn ror_accumulator(&mut self) {
@@ -336,36 +361,52 @@ impl CPU {
     }
 
     ///Bitwise AND
-    fn and(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn and(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let data = self.bus.mem_read(addr);
         self.register_a = self.register_a & data;
         self.update_zero_and_negative_flags(self.register_a);
+
+        if page_crossed { 1 } else { 0 }
     }
     ///BIT - Bit Test
-    fn bit(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn bit(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, _) = self.get_oprand_adress(mode);
         let data = self.bus.mem_read(addr);
         let modification = self.register_a & data;
 
         self.status.set(CpuFlags::ZERO, modification == 0);
         self.status.set(CpuFlags::NEGATIVE, data & 0b0010_0000 != 0);
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
+
+        0
     }
 
     ///EOR - Bitwise Exclusive OR
-    fn eor(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn eor(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let data = self.bus.mem_read(addr);
         self.register_a = self.register_a ^ data;
         self.update_zero_and_negative_flags(self.register_a);
+
+        if page_crossed { 1 } else { 0 }
     }
     ///ORA - Bitwise OR
-    fn ora(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn ora(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let data = self.bus.mem_read(addr);
         self.register_a = self.register_a | data;
         self.update_zero_and_negative_flags(self.register_a);
+
+        if page_crossed { 1 } else { 0 }
     }
 
     ///Decrement X
@@ -380,19 +421,23 @@ impl CPU {
         self.register_y = self.register_y.wrapping_sub(1);
         self.update_zero_and_negative_flags(self.register_y);
     }
-
-    fn dec_mem(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    ///DEC
+    /// 
+    /// (page crosses)
+    fn dec_mem(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, _) = self.get_oprand_adress(mode);
         let data = self.bus.mem_read(addr);
         
         let modification = data.wrapping_sub(1);
         self.bus.mem_write(addr, modification);
         self.update_zero_and_negative_flags(modification);
+
+        0
     }
 
     /// ASL - Arithmetic Shift Left
     fn asl(&mut self, mode: &AddressingMode) -> u8 {
-        let addr = self.get_oprand_adress(mode);
+        let (addr, _) = self.get_oprand_adress(mode);
         let mut data = self.bus.mem_read(addr);
         if data >> 7 == 1 {
             self.status.insert(CpuFlags::CARRY);
@@ -418,7 +463,7 @@ impl CPU {
     }
     ///LSR - Logical Shift Right
     fn lsr(&mut self, mode: &AddressingMode) -> u8 {
-        let addr = self.get_oprand_adress(mode);
+        let (addr, _) = self.get_oprand_adress(mode);
         let mut data = self.bus.mem_read(addr);
         if (data & 0b0000_0001) != 0 {
             self.status.insert(CpuFlags::CARRY);
@@ -567,7 +612,7 @@ impl CPU {
         
     }
     fn write_register(&mut self, mode: &AddressingMode, register: u8) {
-        let addr = self.get_oprand_adress(mode);
+        let (addr, _) = self.get_oprand_adress(mode);
         self.bus.mem_write(addr, register);
     }
     fn stack_pop_u16(&mut self) -> u16 {
@@ -592,24 +637,29 @@ impl CPU {
     // ------------------ CONDITIONS ------------------ //
 
 
-    fn branch_if(&mut self, condition: bool) {
+    fn branch_if(&mut self, condition: bool) -> u8 {
         if condition {
-            self.cycles += 1;
+            let mut extra_cycles = 1;
 
             let offset = self.bus.mem_read(self.program_counter) as i8;
             let base_addr = self.program_counter.wrapping_add(1);
             let new_program_counter = base_addr.wrapping_add(offset as u16);
 
             if (base_addr & 0xFF00) != (new_program_counter & 0xFF00) {
-                self.cycles += 1;
+                extra_cycles += 1;
             }
 
             self.program_counter = new_program_counter;
+            extra_cycles
+        } else {
+            0
         }
     }
-
-    fn compare(&mut self, mode: &AddressingMode, register: u8) {
-        let addr = self.get_oprand_adress(mode);
+    ///CMP 
+    /// 
+    /// (page crosses)
+    fn compare(&mut self, mode: &AddressingMode, register: u8) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let mem_val = self.bus.mem_read(addr);
 
         if register >= mem_val {
@@ -631,6 +681,8 @@ impl CPU {
         } else {
             self.status.remove(CpuFlags::NEGATIVE);
         }
+
+        if page_crossed { 1 } else { 0 }
     }
 
     ///ADC - Add with Carry
@@ -638,8 +690,10 @@ impl CPU {
     /// soma dois numeros e adiciona um bit de carry caso aconteça overflow
     /// SOMA OS NUMEROS DO REGISTRADOR A + O VALOR NO ENDEREÇO DE MEMORIA PASSADO
     /// depois finaliza o comando passando o resultado para o registrador A e dando update nas flags ZERO e NEGATIVE
-    fn adc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn adc(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let val = self.bus.mem_read(addr);
 
         let sum = self.register_a as u16 + val as u16  //+ (((self.status & 0b0000_0001) != 0) as u16); //adiciona 1 se for True e 0 se for False (Rust converte True para 1 e False para 0)
@@ -667,11 +721,15 @@ impl CPU {
         }
         self.register_a = result;
         self.update_zero_and_negative_flags(self.register_a);
+
+        if page_crossed { 1 } else { 0 }
     }
 
     ///SBC - Subtract with Carry
-    fn sbc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    /// 
+    /// (page crosses)
+    fn sbc(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, page_crossed) = self.get_oprand_adress(mode);
         let val = self.bus.mem_read(addr);
 
         let val_complement = !val;
@@ -696,6 +754,8 @@ impl CPU {
         }
         self.register_a = result;
         self.update_zero_and_negative_flags(self.register_a);
+
+        if page_crossed { 1 } else { 0 }
     }
 
     ///TAX - Transfer A to X
@@ -709,14 +769,18 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_y);
     }
 
-    //INC - Increment Memory
-    fn inc_mem(&mut self, mode: &AddressingMode) {
-        let addr = self.get_oprand_adress(mode);
+    ///INC - Increment Memory
+    ///
+    ///(page crosses)
+    fn inc_mem(&mut self, mode: &AddressingMode) -> u8 {
+        let (addr, _) = self.get_oprand_adress(mode);
         let data = self.bus.mem_read(addr);
         
         let modification = data.wrapping_add(1);
         self.bus.mem_write(addr, modification);
         self.update_zero_and_negative_flags(modification);
+
+        0
     }
     ///INX - Increment X
     fn inx(&mut self) {
@@ -727,56 +791,6 @@ impl CPU {
     fn iny(&mut self) {
         self.register_y = self.register_y.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_y);
-    }
-
-    /// function to log the cpu state with the nestest.nes log format
-    #[allow(dead_code)]
-    pub fn log_state(&mut self, file: &mut std::fs::File) {
-        let pc = self.program_counter;
-        let opcode = self.bus.mem_read(pc);
-
-        let b1 = self.bus.mem_read(pc.wrapping_add(1));
-        let b2 = self.bus.mem_read(pc.wrapping_add(2));
-        
-        let bytes_str = match Self::opcode_size(opcode) {
-            1 => format!("{:02X}      ", opcode),
-            2 => format!("{:02X} {:02X}   ", opcode, b1),
-            3 => format!("{:02X} {:02X} {:02X}", opcode, b1, b2),
-            _ => format!("{:02X}      ", opcode),
-        };
-        
-        let line = format!(
-            "{:04X}  {}  {:>31}  A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} CYC:{}\n",
-            pc,
-            bytes_str,
-            " ", //  mnemonic placeholder
-            self.register_a,
-            self.register_x,
-            self.register_y,
-            self.status.bits(),
-            self.stack_pointer,
-            self.cycles
-        );
-        
-        file.write_all(line.as_bytes()).unwrap();
-    }
-
-    fn opcode_size(opcode: u8) -> u8 {
-        match opcode {
-            // tamanho 1
-            0x00 | 0x08 | 0x18 | 0x28 | 0x38 | 0x40 | 0x48 | 0x58 |
-            0x60 | 0x68 | 0x78 | 0x88 | 0x8A | 0x98 | 0x9A | 0xA8 |
-            0xAA | 0xB8 | 0xBA | 0xC8 | 0xCA | 0xD8 | 0xE8 | 0xEA |
-            0xF8 | 0x0A | 0x2A | 0x4A | 0x6A => 1,
-            // tamanho 3
-            0x0D | 0x0E | 0x19 | 0x1D | 0x20 | 0x2C | 0x2D | 0x2E |
-            0x39 | 0x3D | 0x4C | 0x4D | 0x4E | 0x59 | 0x5D | 0x6D |
-            0x6E | 0x79 | 0x7D | 0x8C | 0x8D | 0x8E | 0x99 | 0x9D |
-            0xAC | 0xAD | 0xAE | 0xB9 | 0xBC | 0xBD | 0xBE | 0xCC |
-            0xCD | 0xCE | 0xD9 | 0xDD | 0xEC | 0xED | 0xEE | 0xF9 |
-            0xFD => 3,
-            _ => 2,
-        }
     }
 
     pub fn step(&mut self) -> (bool, u8)  {
@@ -804,51 +818,44 @@ impl CPU {
 
         let program_counter_state = self.program_counter;
 
-
-        let opcode = opcodes.get(&code).expect(&format!("OpCode {:x} não foi reconhecido no endereço {:04X}", code, self.program_counter - 1));
-
-        self.cycles += opcode.cycles as u64;
+        let opcode = opcodes.get(&self.last_opcode).expect(&format!("OpCode {:x} não foi reconhecido no endereço {:04X}", self.last_opcode, self.program_counter - 1));
         
-        let tick_result =  self.bus.tick(opcode.cycles);
-
-        if tick_result.nmi {
-            self.vblank = true;
-        }
+        let mut opcycles = opcode.cycles;
 
         match code {
             //LDA
             0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
                 //cada uma das instruções representa o comando LDA mas como flags diferentes
-                self.lda(&opcode.mode);
+                opcycles += self.lda(&opcode.mode);
             }
 
             //STA
             0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
-                self.sta(&opcode.mode);
+                opcycles += self.sta(&opcode.mode);
             }
 
             //ADC
             0x69 | 0x65 | 0x75 | 0x6D | 0x7D | 0x79 | 0x61 | 0x71 => {
-                self.adc(&opcode.mode);
+                opcycles += self.adc(&opcode.mode);
             }
             //SBC
             0xE9 | 0xE5 | 0xF5 | 0xED | 0xFD | 0xF9 | 0xE1 | 0xF1 => {
-                self.sbc(&opcode.mode);
+                opcycles += self.sbc(&opcode.mode);
             }
 
             //CMP (COMPARE A)
             0xC9 | 0xC5 | 0xD5 | 0xCD | 0xDD | 0xD9 | 0xC1 | 0xD1 => {
-                self.compare(&opcode.mode, self.register_a);
+                opcycles += self.compare(&opcode.mode, self.register_a);
             }
 
             //CPX (COMPARE X)
             0xE0 | 0xE4 | 0xEC => {
-                self.compare(&opcode.mode, self.register_x);
+                opcycles += self.compare(&opcode.mode, self.register_x);
             }
 
             //CPY (COMPARE Y)
             0xC0 | 0xC4 | 0xCC => {
-                self.compare(&opcode.mode, self.register_y);
+                opcycles += self.compare(&opcode.mode, self.register_y);
             }
 
             //STX - Store X
@@ -861,7 +868,7 @@ impl CPU {
             }
             //AND BITWISE
             0x21 | 0x29 | 0x25 | 0x35 | 0x2D | 0x3D | 0x39 | 0x31 => {
-                self.and(&opcode.mode);
+                opcycles += self.and(&opcode.mode);
             }
 
             //ASL - Arithmetic Shift Left
@@ -880,20 +887,20 @@ impl CPU {
             }
             // BIT - Bit Test
             0x24 | 0x2C => {
-                self.bit(&opcode.mode);
+                opcycles += self.bit(&opcode.mode);
             }
             // ORA
             0x09 | 0x05 | 0x15 | 0x0D | 0x1D | 0x19 | 0x01 | 0x11 => {
-                self.ora(&opcode.mode);
+                opcycles += self.ora(&opcode.mode);
             }
             // EOR - Exclusive OR
             0x49 | 0x45 | 0x55 | 0x4D | 0x5D | 0x59 | 0x41 | 0x51 => {
-                self.eor(&opcode.mode);
+                opcycles += self.eor(&opcode.mode);
             }
 
             //DEC - Decrement Memory
             0xC6 | 0xD6 | 0xCE | 0xDE => {
-                self.dec_mem(&opcode.mode);
+                opcycles += self.dec_mem(&opcode.mode);
             }
             //DEX - Decrement X
             0xCA => self.dex(),
@@ -901,21 +908,21 @@ impl CPU {
             0x88 => self.dey(),
 
             // BCC - Branch if Carry Clear
-            0x90 => self.branch_if(!self.status.contains(CpuFlags::CARRY)),
+            0x90 => { opcycles += self.branch_if(!self.status.contains(CpuFlags::CARRY)); }
             // BCS - Branch if Carry Set
-            0xB0 => self.branch_if(self.status.contains(CpuFlags::CARRY)),
+            0xB0 => { opcycles += self.branch_if(self.status.contains(CpuFlags::CARRY)); }
             // BEQ - Branch if Equal
-            0xD0 => self.branch_if(!self.status.contains(CpuFlags::ZERO)),
+            0xF0 => { opcycles += self.branch_if(self.status.contains(CpuFlags::ZERO)); }
             // BNE - Branch if Not Equal
-            0xF0 => self.branch_if(self.status.contains(CpuFlags::ZERO)),
+            0xD0 => { opcycles += self.branch_if(!self.status.contains(CpuFlags::ZERO)); }
             // BPL - Branch if Plus
-            0x10 => self.branch_if(!self.status.contains(CpuFlags::NEGATIVE)),
-            // BNE - Branch if Minus
-            0x30 => self.branch_if(self.status.contains(CpuFlags::NEGATIVE)),
+            0x10 => { opcycles += self.branch_if(!self.status.contains(CpuFlags::NEGATIVE)); }
+            // BMI - Branch if Minus
+            0x30 => { opcycles += self.branch_if(self.status.contains(CpuFlags::NEGATIVE)); }
             // BVC - Branch if Overflow Clear
-            0x50 => self.branch_if(!self.status.contains(CpuFlags::OVERFLOW)),
+            0x50 => { opcycles += self.branch_if(!self.status.contains(CpuFlags::OVERFLOW)); }
             // BVS - Branch if Overflow Set
-            0x70 => self.branch_if(self.status.contains(CpuFlags::OVERFLOW)),
+            0x70 => { opcycles += self.branch_if(self.status.contains(CpuFlags::OVERFLOW)); }
 
             //SET FLAGS
             0x38 => self.sec(),
@@ -930,11 +937,11 @@ impl CPU {
 
             //LDX 
             0xA2 | 0xA6 | 0xB6 | 0xAE | 0xBE => {
-                self.ldx(&opcode.mode);
+                opcycles += self.ldx(&opcode.mode);
             }
             //LDY
             0xA0 | 0xA4 | 0xB4 | 0xAC | 0xBC => {
-                self.ldy(&opcode.mode);
+                opcycles += self.ldy(&opcode.mode);
             }
             //TAX
             0xAA => self.tax(),
@@ -943,7 +950,7 @@ impl CPU {
 
             //INC
             0xE6 | 0xF6 | 0xEE | 0xFE => {
-                self.inc_mem(&opcode.mode);
+                opcycles += self.inc_mem(&opcode.mode);
             }
 
             //ROL ACCUMULATOR / ROtate Accumulator Left
@@ -951,7 +958,7 @@ impl CPU {
 
             //ROL - Rotate Left
             0x26 | 0x36 | 0x2E | 0x3E => {
-                self.rol(&opcode.mode);
+                opcycles += self.rol(&opcode.mode);
             }
 
             //ROR ACCUMULATOR / Rotate Accumulator Right
@@ -959,7 +966,7 @@ impl CPU {
 
             //ROR - Rotate Right
             0x66 | 0x76 | 0x6E | 0x7E => {
-                self.ror(&opcode.mode);
+                opcycles += self.ror(&opcode.mode);
             }
 
             //PLA
@@ -1008,6 +1015,14 @@ impl CPU {
             //BRK
             0x00 => return (false, 7),
             _ => todo!("code: {}", code)
+        }
+
+        self.cycles += opcycles as u64;
+
+        let tick_result =  self.bus.tick(opcycles);
+
+        if tick_result.nmi {
+            self.vblank = true;
         }
 
         //increments the program counter accordingly to how many cicles the opcode is specified at the hashmap

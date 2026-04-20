@@ -21,3 +21,6 @@ debug-assertions = true
 
 [profile.release]
 lto = "fat"
+
+[features]
+debug_log = []
