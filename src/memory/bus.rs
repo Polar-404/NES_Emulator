@@ -1,5 +1,3 @@
-use core::panic;
-use std::fmt::Error;
 use std::path::Path;
 
 use crate::apu::apu::APU;
@@ -11,6 +9,11 @@ use ringbuf::traits::{Observer as _, Producer as _};
 
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
+
+pub struct TickResult {
+    pub nmi: bool,
+    pub irq: bool,
+}
 
 pub struct BUS {
 
@@ -28,14 +31,14 @@ pub struct BUS {
     ///Unmapped. Available for cartridge use.
     ///[$6000–$7FFF | Usually cartridge RAM, when present]
     ///[$8000–$FFFF | Usually cartridge ROM and mapper registers]
-    mapper: Rc<RefCell<Box<dyn Mapper>>>,
+    pub mapper: Rc<RefCell<dyn Mapper>>,
     pub ppu: PPU,
     pub apu: APU,
 }
 
 impl BUS {
     
-    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> Self {
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         BUS {
             cpu_memory: [0; 0x0800],
             apu_and_io_functionality: [0; 0x08],
@@ -84,11 +87,13 @@ impl BUS {
     #[inline(always)]
     pub fn mem_write(&mut self, addr: u16, val: u8) -> bool {
         match addr {
+            //cpu ram
             0x0000..=0x1FFF => {
                 let addr = addr & 0x07FF;
                 self.cpu_memory[addr as usize] = val;
                 false
             }
+            //ppu registers
             0x2000..=0x3FFF => {
                 let addr = addr & 0x0007;
                 if self.ppu.write_registers(addr, val) {
@@ -96,6 +101,7 @@ impl BUS {
                 }
                 false
             }
+            // dma, controls and audio
             0x4000..=0x4017 => {
 
                 if addr == 0x4014 {
@@ -118,11 +124,13 @@ impl BUS {
                 self.apu.write_register(addr, val);
                 false
             }
+            // *currently disabled* apu and yo functionality
             0x4018..=0x401F => {
                 let addr = addr - 0x4018;
                 self.apu_and_io_functionality[addr as usize] = val;
                 false
             }
+            //cartridge
             0x4020..=0xFFFF => {
                 //passing it's real address(without subtraction) to the mapper to take care of it
                 self.mapper.borrow_mut().write(addr, val);
@@ -144,17 +152,25 @@ impl BUS {
         self.mem_write(pos + 1, hi);
     }
 
-    pub fn tick(&mut self, cycles: u8) -> bool {
+    pub fn tick(&mut self, cycles: u8) -> TickResult {
         self.ppu.tick(cycles as u16 * 3);
         for _ in 0..cycles {
             self.apu.step();
         }
 
+        let mut tick_result = TickResult {
+            nmi: false,
+            irq: false,
+        };
+
         if self.ppu.nmi_occurred {
             self.ppu.nmi_occurred = false;
-            return true;
+            tick_result.nmi = true;
         }
-        false
+
+        tick_result.irq = self.mapper.borrow().irq_pending();
+
+        tick_result
     }
 
     pub fn sync_audio(&mut self, cycles: u8, audio: &mut (AudioOutput, u32)) {
@@ -173,20 +189,62 @@ impl BUS {
     //}
 }
 
-#[inline]
 /// fn to reduce code repetition
-fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<Box<dyn Mapper>>>
+fn wrap_in_pointers<T>(mapper: T) ->  Rc<RefCell<dyn Mapper>>
 where T: Mapper + 'static {
     Rc::new(
         RefCell::new(
-            Box::new(
-                mapper
-            )
+            mapper
         )
     )
 }
 
-pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, Box<dyn std::error::Error>> {
+/// Loads an iNES ROM file and returns the appropriate "mapper" for the cartridge.
+/// 
+/// The "Mappers" in this codebase are a customized 'struct/data format' with all the data of the cartridge on it
+/// (which ik isn't the real meaning of an actual NES mapper)
+/// organized in a format that this emulator can read
+///
+/// Parses the 16-byte iNES header to extract ROM layout information, slices the
+/// binary data into PRG and CHR regions, determines the mirroring mode, and
+/// constructs the mapper instance corresponding to the cartridge's mapper ID.
+///
+/// ### iNES Header Format
+///
+/// ```text
+/// Offset  Size  Description
+/// ──────────────────────────────────────────────────────────────────────
+/// 0–3     4     Magic: $4E $45 $53 $1A ("NES" + MS-DOS EOF marker)
+/// 4       1     PRG ROM size in 16 KB units
+/// 5       1     CHR ROM size in 8 KB units (0 = board uses CHR RAM)
+/// 6       1     Flags 6: [Mapper low nibble | 4-screen | trainer | battery | mirroring]
+/// 7       1     Flags 7: [Mapper high nibble | NES 2.0 | PlayChoice | VS Unisystem]
+/// 8       1     PRG RAM size (rarely used)
+/// 9       1     TV system (rarely used)
+/// 10      1     TV system / PRG RAM presence (unofficial)
+/// 11–15   5     Padding (should be zero)
+///
+/// Flags 6 bit layout:
+///   7 6 5 4   3         2        1          0
+///   ─────────────────────────────────────────
+///   Mapper lo │ 4-screen │ trainer │ battery │ mirroring
+///                                            └─ 0: horizontal arrangement
+///                                               1: vertical arrangement
+/// ```
+///
+/// ### Arguments
+///
+/// * `path` - Path to the `.nes` ROM file.
+///
+/// ### Errors
+///
+/// Returns an error if:
+/// - The file cannot be read.
+/// - The mapper ID extracted from the header is not yet implemented.
+/// - Four-screen mirroring is encountered (currently unimplemented).
+/// 
+/// **For more information about real NES Mappers, go to:** https://www.nesdev.org/wiki/Mapper
+pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dyn std::error::Error>> {
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
     let rom_data = std::fs::read(path)?;
@@ -194,6 +252,7 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, B
 
     let has_trainer = (rom_data[6] & 0b0000_0100) != 0;
 
+    //TODO
     println!("--- ROM HEADER INFO ---");
     println!("Byte 4 (PRG Banks): {}", rom_data[4]);
     println!("Byte 5 (CHR Banks): {}", rom_data[5]);
@@ -209,10 +268,10 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, B
 
     let prg_rom_start = 16 + if has_trainer {512} else {0}; //the header size is 16 bytes
     let prg_rom_end = prg_rom_start + program_size; 
-    let prg_rom_data = rom_data[prg_rom_start..prg_rom_end].to_vec(); // mapping the actual game
+    let prg_rom_data = rom_data[prg_rom_start..prg_rom_end].into(); // mapping the actual game
     
     //The CHR ROM starts after the PRG ROM
-    let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].to_vec();
+    let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].into();
     
     //mirroring type
     let mirroring_byte = rom_data[6] & 0b0000_0001;
@@ -229,12 +288,10 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<Box<dyn Mapper>>>, B
     }
 
     match mapper_match {
-        0 => {
-            Ok(wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type)))
-        }
-        1 => {
-            Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data)))
-        }
+        0 => Ok(wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
+        1 => Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data))),
+        4 => Ok(wrap_in_pointers(InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type))),
+
         _ => Err(format!("Mapper {} is not supported yet", mapper_match).into())
     }
 }

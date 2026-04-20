@@ -7,10 +7,10 @@ pub struct PPUBUS {
     //32 byte pallete [16 for backgroudn 16 for foreground]
     palette_ram: [u8; 0x20],
     vram: [u8; 0x0800], 
-    pub mapper: Rc<RefCell<Box<dyn Mapper>>>, // 2KB VRAM
+    pub mapper: Rc<RefCell<dyn Mapper>>, // 2KB VRAM
 }
 impl PPUBUS {
-    pub fn new(mapper: Rc<RefCell<Box<dyn Mapper>>>) -> PPUBUS {
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> PPUBUS {
         PPUBUS {
             palette_ram: [0; 0x20],
             vram: [0; 0x0800],
@@ -47,6 +47,9 @@ impl PPUBUS {
     //TODO remover a referencia mutavel e limpar esse codigo depois que funcionar
     pub fn read_ppubus(&mut self, addr: u16) -> u8 {
         let addr =  addr & 0x3FFF;
+
+        self.mapper.borrow_mut().notify_ppu_address(addr);
+
         match addr {
             //minor optimzation ('fast-pathing' the palette since its the most common reading)
             0x3F00..=0x3FFF => {
@@ -110,10 +113,9 @@ mod tests {
     fn make_bus_horizontal() -> PPUBUS {
         PPUBUS::new(TestMapper::new(vec![]))
     }
-
+    
     fn make_bus_vertical() -> PPUBUS {
-        // TestMapper usa Horizontal por padrão, então precisamos de um mapper customizado
-        // por enquanto vamos testar só o que o TestMapper suporta
+        // todo! this should have a personalized option for mirroring
         PPUBUS::new(TestMapper::new(vec![]))
     }
 
