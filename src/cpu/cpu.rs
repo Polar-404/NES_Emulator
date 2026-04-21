@@ -13,7 +13,6 @@ use std::cell::RefCell;
 bitflags! {
 
     /// This struct defines the CPU flags, and the `bitflags!` macro makes them easier to work with.
-
     #[derive(Debug, Clone, Copy)]
     pub struct CpuFlags: u8 {
         const CARRY             = 0b00000001;
@@ -153,7 +152,7 @@ impl CPU {
                 (deref, page_crossed)
             }
             AddressingMode::NoneAddressing => {
-                panic!("tried to 'get_addressing_mode()' from impled addressing instruction, or mode {:?} is not suported", mode);
+                panic!("Panic at PC: {:04X}, Opcode: {:02X}. Tentou buscar endereço em NoneAddressing.", self.program_counter - 1, self.last_opcode);
             }
 
         }
@@ -793,6 +792,21 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_y);
     }
 
+    /// BRK - Force Interrupt
+    fn brk(&mut self) {
+        let return_addr = self.program_counter.wrapping_add(1);
+        self.stack_push_u16(return_addr);
+
+        let mut flags = self.status.clone();
+        flags.insert(CpuFlags::BREAK);
+        flags.insert(CpuFlags::BREAK2);
+        self.stack_push(flags.bits());
+
+        self.status.insert(CpuFlags::INTERRUPT_DISABLE);
+
+        self.program_counter = self.bus.mem_read_u16(0xFFFE);
+    }
+
     pub fn step(&mut self) -> (bool, u8)  {
         self.step_with_callback(None::<fn(&mut Self)>)
     }
@@ -809,11 +823,11 @@ impl CPU {
             self.trigger_cpu_nmi();
         }
 
-        if self.bus.mapper.borrow_mut().irq_pending() || !self.status.contains(CpuFlags::INTERRUPT_DISABLE) {
+        if self.bus.mapper.borrow_mut().irq_pending() && !self.status.contains(CpuFlags::INTERRUPT_DISABLE) {
             self.trigger_cpu_irq();
         }
 
-        let code = self.bus.mem_read(self.program_counter);
+        self.last_opcode = self.bus.mem_read(self.program_counter);
         self.program_counter += 1;
 
         let program_counter_state = self.program_counter;
@@ -822,7 +836,7 @@ impl CPU {
         
         let mut opcycles = opcode.cycles;
 
-        match code {
+        match self.last_opcode {
             //LDA
             0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
                 //cada uma das instruções representa o comando LDA mas como flags diferentes
@@ -1013,8 +1027,9 @@ impl CPU {
             }
 
             //BRK
-            0x00 => return (false, 7),
-            _ => todo!("code: {}", code)
+            0x00 => self.brk(),
+
+            _ => todo!("code: {}", self.last_opcode)
         }
 
         self.cycles += opcycles as u64;
