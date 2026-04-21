@@ -502,9 +502,9 @@ impl Mapper for InesMapper004 {
                 //Nametable arrangement ($A000-$BFFE, even)
                 if addr % 2 == 0 {
                     if val & 0x01 == 0 {
-                        self.mirroring = Mirroring::Horizontal
+                        self.mirroring = Mirroring::Vertical;
                     } else {
-                        self.mirroring = Mirroring::Vertical
+                        self.mirroring = Mirroring::Horizontal;
                     }
                 }
                 //PRG RAM protect ($A001-$BFFF, odd)
