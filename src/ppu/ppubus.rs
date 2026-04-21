@@ -44,11 +44,14 @@ impl PPUBUS {
             }
         }
     }
+    
     //TODO remover a referencia mutavel e limpar esse codigo depois que funcionar
     pub fn read_ppubus(&mut self, addr: u16) -> u8 {
         let addr =  addr & 0x3FFF;
 
-        self.mapper.borrow_mut().notify_ppu_address(addr);
+        if addr < 0x3F00 {
+            self.mapper.borrow_mut().notify_ppu_address(addr);
+        }
 
         match addr {
             //minor optimzation ('fast-pathing' the palette since its the most common reading)
@@ -63,7 +66,6 @@ impl PPUBUS {
                 self.palette_ram[palette_addr]
                 
             }
-
             0..=0x1FFF => {
                 self.mapper.borrow().read_chr(addr)
             }
@@ -71,7 +73,6 @@ impl PPUBUS {
             0x2000..=0x3EFF  => {
                 self.read_vram(addr)
             }
-
             _ => {
                 todo!();
             }

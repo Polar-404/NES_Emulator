@@ -414,40 +414,51 @@ impl PPU {
             | if self.bg_next_tile_attr & 0x02 != 0 {0xFF} else {0x00};
 
     }
+
     #[inline]
     fn load_sprite_shifters(&mut self) {
         let sprite_size_16 = self.ctrl.contains(PpuCtrlFlags::SpriteSize);
 
-        for i in 0..self.sprite_count {
-            let (sprite_y, tile_id, attr, _) = self.sprite_scanline[i];
-            let flip_v = attr & 0x80 != 0;
-            
-            let row = (self.scanline - sprite_y as i16) as u8;
-            let (pattern_base, tile, tile_row) = if sprite_size_16 {
-            
-                let bank: u16 = if tile_id & 1 != 0 { 0x1000 } else { 0x0000 };
-                let base_tile = (tile_id & 0xFE) as u16;
+        for i in 0..8 {
+            if i < self.sprite_count {
+                let (sprite_y, tile_id, attr, _) = self.sprite_scanline[i];
+                let flip_v = attr & 0x80 != 0;
                 
-                if row < 8 {
-                    let r = if flip_v { 7 - row } else { row };
-                    let t = if flip_v { base_tile + 1 } else { base_tile };
-                    (bank, t, r)
+                let row = (self.scanline - sprite_y as i16) as u8;
+                let (pattern_base, tile, tile_row) = if sprite_size_16 {
+                
+                    let bank: u16 = if tile_id & 1 != 0 { 0x1000 } else { 0x0000 };
+                    let base_tile = (tile_id & 0xFE) as u16;
+                    
+                    if row < 8 {
+                        let r = if flip_v { 7 - row } else { row };
+                        let t = if flip_v { base_tile + 1 } else { base_tile };
+                        (bank, t, r)
+                    } else {
+                        let r = if flip_v { 7 - (row - 8) } else { row - 8 };
+                        let t = if flip_v { base_tile } else { base_tile + 1 };
+                        (bank, t, r)
+                    }
                 } else {
-                    let r = if flip_v { 7 - (row - 8) } else { row - 8 };
-                    let t = if flip_v { base_tile } else { base_tile + 1 };
-                    (bank, t, r)
-                }
+                    let bank: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) { 0x1000 } else { 0x0000 };
+                    let r = if flip_v { 7 - row } else { row };
+                    (bank, tile_id as u16, r)
+                };
+
+                let addr = pattern_base + tile * 16 + tile_row as u16;
+                self.sprite_shifter_lo[i] = self.ppubus.read_ppubus(addr);
+                self.sprite_shifter_hi[i] = self.ppubus.read_ppubus(addr + 8);
+                
             } else {
                 let bank: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) { 0x1000 } else { 0x0000 };
-                let r = if flip_v { 7 - row } else { row };
-                (bank, tile_id as u16, r)
-            };
-
-            let addr = pattern_base + tile * 16 + tile_row as u16;
-            self.sprite_shifter_lo[i] = self.ppubus.read_ppubus(addr);
-            self.sprite_shifter_hi[i] = self.ppubus.read_ppubus(addr + 8);
+                let dummy_addr = bank | 0x0FF0; 
+                
+                self.ppubus.read_ppubus(dummy_addr);
+                self.ppubus.read_ppubus(dummy_addr + 8);
+            }
         }
     }
+
     #[inline]
     fn update_shifters(&mut self) {
         if self.mask.contains(PpuMaskFlags::EnableBackground) {
@@ -514,7 +525,7 @@ impl PPU {
 
         // ── sprite 0 hit ─────────────────────────────────────────────
         if self.sprite0_hit_possible && sp_zero_rendered
-        && sp_pixel != 0
+        && sp_pixel != 0 && bg_pixel != 0
         && self.cycle >= 2 && self.cycle < 256
         && !self.status.contains(PpuStatusFlags::Sprite0hit) {
             self.status.insert(PpuStatusFlags::Sprite0hit);
