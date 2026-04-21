@@ -11,11 +11,16 @@ use crate::{
     ui::menu::*,
 };
 
+#[cfg(feature = "debug_log")]
+use crate::debug::{cpu_debug, ppu_debug};
+
+
 mod cpu;
 mod memory;
 mod ppu;
 mod apu;
 mod ui;
+mod debug;
 
 #[macro_use]
 extern crate lazy_static;
@@ -80,12 +85,8 @@ struct EmulatorInstance {
         let mut cpu = CPU::new(mapper);
         
         cpu.reset_interrupt();
-
         //FORCING NESTEST
         //cpu.program_counter = 0xC000; 
-        //cpu.status = CpuFlags::from_bits_truncate(0b100100);
-        //cpu.stack_pointer = 0xFD; 
-        //cpu.cycles = 7;
 
         let image = Image::gen_image_color(256, 240, Color { r: 0.0 , g: 0.0, b: 0.0, a: 1.0 });
         let ppu_texture = Texture2D::from_image(&image);
@@ -164,7 +165,12 @@ enum EmulatorState {
 
     Loading { game_path: PathBuf },
 
-    Running { emulator_instance: EmulatorInstance, audio: Option<(AudioOutput, u32)> }
+    Running { 
+        emulator_instance: EmulatorInstance, 
+        audio: Option<(AudioOutput, u32)>, 
+        #[cfg(feature = "debug_log")]
+        logger: Box<dyn FnMut(&mut CPU)>
+    }
 }
 
 fn window_conf() -> Conf {
@@ -200,7 +206,11 @@ async fn main() {
 
     let mut smoothed_fps = 60.0;
 
-    async fn rungame(emulator: &mut EmulatorInstance, audio: &mut Option<(AudioOutput, u32)>) {
+    async fn rungame(
+        emulator: &mut EmulatorInstance, 
+        audio: &mut Option<(AudioOutput, u32)>, 
+        #[cfg(feature = "debug_log")]
+        logger: &mut Box<dyn FnMut(&mut CPU)>) {
 
         //let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
         //let mut cycles_since_sample: f64 = 0.0;
@@ -212,6 +222,11 @@ async fn main() {
 
         while !emulator.cpu.bus.ppu.frame_complete {
             //emulator.cpu.log_state(&mut log_file);
+
+            #[cfg(feature = "debug_log")]
+            let (_, cycles) = emulator.cpu.step_with_callback(Some(|cpu: &mut CPU| logger(cpu)));
+
+            #[cfg(not(feature = "debug_log"))]
             let (_, cycles) = emulator.cpu.step();
 
             if let Some(ref mut audio) = audio {
@@ -310,51 +325,19 @@ async fn main() {
                     }
                 };
 
-                let mut test_started = false;
-
                 #[cfg(feature = "debug_log")]
-                //let logger = Box::new(ppu_debug::log_ppu (
-                //    Some("ppu_log.txt"),
-                //    500_000,
-                //    {
-                //        let mut loop_counter = 0u32;
-                //        move |cpu: &CPU| {
-                //            if cpu.bus.ppu.frame_complete {
-                //                loop_counter += 1;
-                //            }
-                //            
-                //            cpu.cycles >= 100_000_000 || loop_counter >= 10_000
-                //        }
-                //    }
-                //));
                 let logger = Box::new(cpu_debug::cpu_logger(
-                    Some(".log/blargg_test.txt"),
-                    10000,
-                    move |cpu: &mut CPU| {
-                        let status = cpu.bus.mem_read(0x6000); 
-                        if status == 0x80 {
-                            test_started = true;
-                        }
-
-                        if test_started && status != 0x80 {
-                            let mut text = String::new();
-                            let mut i = 0x6004;
-                            
-                            loop {
-                                let char_val = cpu.bus.mem_read(i);
-                                if char_val == 0 { break; }
-                                text.push(char_val as char);
-                                i += 1;
+                    Some(".log/cpu_log.txt"),
+                    100_000,
+                    {
+                        let mut loop_counter = 0u32;
+                        move |cpu: &mut CPU| {
+                            if cpu.bus.ppu.frame_complete {
+                                loop_counter += 1;
                             }
-
-                            println!("--- TEST RESULT ---");
-                            println!("Status Code: {:#04X}", status);
-                            println!("Mensagem: \n{}", text);
-                            println!("--------------------------");
                             
-                            return true; 
+                            cpu.cycles >= 100_000_000 || loop_counter >= 10_000
                         }
-                        false
                     }
                 ));
 
@@ -363,9 +346,19 @@ async fn main() {
                 //print_program(&emu_instance);
                 println!("tipo de mirroring: {:?}", emu_instance.cpu.bus.ppu.ppubus.mapper.borrow().mirroring());
                 
-                state = EmulatorState::Running { emulator_instance: emu_instance, audio};
+                state = EmulatorState::Running { 
+                    emulator_instance: emu_instance, 
+                    audio,
+                    #[cfg(feature = "debug_log")]
+                    logger
+                };
             }
-            EmulatorState::Running { ref mut emulator_instance, ref mut audio } => {
+            EmulatorState::Running { 
+                ref mut emulator_instance, 
+                ref mut audio, 
+                #[cfg(feature = "debug_log")]
+                ref mut logger 
+            } => {
 
                 emulator_instance.cpu.bus.joypad_1.set_button(
                     JoyPadButtons::A, is_key_down(KeyCode::J) || is_key_down(KeyCode::Z) 
@@ -403,8 +396,10 @@ async fn main() {
                     emulator_instance.is_paused = !emulator_instance.is_paused;
                 }
 
+                clear_background(BLACK);
+
                 if !emulator_instance.is_paused {
-                    rungame(emulator_instance, audio).await;
+                    rungame(emulator_instance, audio, #[cfg(feature = "debug_log")] logger).await;
 
                     smoothed_fps = (smoothed_fps * 0.9) + (get_fps() as f32 * 0.1);
                     draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
