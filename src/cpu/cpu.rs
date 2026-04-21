@@ -1044,7 +1044,7 @@ impl CPU {
         if program_counter_state == self.program_counter {
             self.program_counter += (opcode.len -1) as u16;
         }
-        (true, opcode.cycles)
+        (true, opcycles)
     }
 
     pub fn format_cpu_status(status: u8) -> String {

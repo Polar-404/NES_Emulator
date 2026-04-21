@@ -77,7 +77,8 @@ struct EmulatorInstance {
     debug_frame_counter: u8,
     cached_debug_text: Vec<String>,
 
-    stats: PerfomanceStats
+    stats: PerfomanceStats,
+    hide_overscan: bool,
 
 } impl EmulatorInstance {
     fn new(game_path: PathBuf) -> Result<EmulatorInstance, Box<dyn std::error::Error>> {
@@ -103,6 +104,7 @@ struct EmulatorInstance {
             show_debug_info: false, 
             is_paused: false,
             stats: PerfomanceStats::new(),
+            hide_overscan: true,
 
             debug_frame_counter: 0,
             cached_debug_text: Vec::new(),
@@ -238,13 +240,31 @@ async fn main() {
         emulator.image.bytes.copy_from_slice(&emulator.cpu.bus.ppu.frame_buffer);
         emulator.ppu_texture.update(&emulator.image);
 
+        let (source_rect, draw_width, draw_height) = if emulator.hide_overscan {
+            (
+                Some(Rect::new(8.0, 8.0, 240.0, 224.0)),
+                240.0,
+                224.0
+            )
+        } else {
+            (
+                None,
+                256.0,
+                240.0
+            )
+        };
+
         draw_texture_ex(
             &emulator.ppu_texture,
             0.0,
             0.0,
-            WHITE, /* Color { r: 1.0, g: 0.95, b: 0.95, a: 1.0 } */
+            WHITE,
             DrawTextureParams {
-                dest_size: Some(vec2(256.0 * (2.0 * MULTIPLY_RESOLUTION as f32), 240.0 * (2.0 * MULTIPLY_RESOLUTION as f32))), 
+                dest_size: Some(vec2(
+                    draw_width * (2.0 * MULTIPLY_RESOLUTION as f32), 
+                    draw_height * (2.0 * MULTIPLY_RESOLUTION as f32)
+                )), 
+                source: source_rect,
                 ..Default::default()
             },
         );

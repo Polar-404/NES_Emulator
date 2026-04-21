@@ -45,13 +45,11 @@ pub struct PPU {
     pub frame_buffer: Box<[u8]>, // *3 to RGB channels
     pub frame_complete: bool,
 
-    pub state: State,
+    //pub state: State,
 
     pub ppubus: PPUBUS,
 
     pub nmi_occurred: bool,
-
-    odd_frame: bool,
 
     // ── Registers($2000–$2007) ───────────────────────────────────
     pub ctrl:   PpuCtrlFlags,
@@ -101,12 +99,11 @@ impl PPU {
             frame_buffer: vec![0; SCREEN_WIDTH * SCREEN_HEIGHT * 4].into_boxed_slice(),  // *4 to RGBA channels
             frame_complete: false,
 
-            state:      State::Visible,
+            //state:      State::Visible,
 
             ppubus:     PPUBUS::new(mapper),
 
             nmi_occurred: false,
-            odd_frame: false,
 
             ctrl: PpuCtrlFlags::new(),
             mask: PpuMaskFlags::new(),
@@ -428,16 +425,17 @@ impl PPU {
             let row = (self.scanline - sprite_y as i16) as u8;
             let (pattern_base, tile, tile_row) = if sprite_size_16 {
             
-            let bank: u16 = if tile_id & 1 != 0 { 0x1000 } else { 0x0000 };
-            let base_tile = (tile_id & 0xFE) as u16;
-            if row < 8 {
-
-            let r = if flip_v { 7 - row } else { row };
-                    (bank, base_tile, r)
+                let bank: u16 = if tile_id & 1 != 0 { 0x1000 } else { 0x0000 };
+                let base_tile = (tile_id & 0xFE) as u16;
+                
+                if row < 8 {
+                    let r = if flip_v { 7 - row } else { row };
+                    let t = if flip_v { base_tile + 1 } else { base_tile };
+                    (bank, t, r)
                 } else {
-
                     let r = if flip_v { 7 - (row - 8) } else { row - 8 };
-                    (bank, base_tile + 1, r)
+                    let t = if flip_v { base_tile } else { base_tile + 1 };
+                    (bank, t, r)
                 }
             } else {
                 let bank: u16 = if self.ctrl.contains(PpuCtrlFlags::SpritePattern) { 0x1000 } else { 0x0000 };
@@ -462,11 +460,15 @@ impl PPU {
     #[inline]
     fn render_pixel(&mut self) {
         let mux: u16 = 0x8000 >> self.fine_x;
+        let x = (self.cycle - 1) as u8;
 
         // ── background ───────────────────────────────────────────────
         let mut bg_pixel = 0u8;
         let mut bg_palette = 0u8;
-        if self.mask.contains(PpuMaskFlags::EnableBackground) {
+        
+        let show_bg_left = self.mask.bits() & 0b0000_0010 != 0; 
+        
+        if self.mask.contains(PpuMaskFlags::EnableBackground) && (x >= 8 || show_bg_left) {
             let p0 = ((self.bg_shift_lo & mux) != 0) as u8;
             let p1 = ((self.bg_shift_hi & mux) != 0) as u8;
             bg_pixel = (p1 << 1) | p0;
@@ -482,8 +484,9 @@ impl PPU {
         let mut sp_priority = false;
         let mut sp_zero_rendered = false;
 
-        if self.mask.contains(PpuMaskFlags::EnableSprites) {
-            let x = (self.cycle - 1) as u8;
+        let show_sp_left = self.mask.bits() & 0b0000_0100 != 0;
+
+        if self.mask.contains(PpuMaskFlags::EnableSprites) && (x >= 8 || show_sp_left) {
             for i in 0..self.sprite_count {
                 let sprite_x = self.sprite_scanline[i].3;
                 if x < sprite_x || x >= sprite_x.wrapping_add(8) {
