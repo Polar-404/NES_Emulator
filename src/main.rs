@@ -1,13 +1,18 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use macroquad::prelude::*;
 use arboard::Clipboard;
-use sysinfo::{System, Pid};
 
 use crate::{
-    cpu::cpu::CPU, 
     apu::audio::AudioOutput,
-    ui::menu::*,
+    ui::pause_menu::*,
+
+    engine::{
+        config::*,
+        instance::*,
+        input::*,
+        state::*,
+    }
 };
 
 #[cfg(feature = "debug_log")]
@@ -26,21 +31,6 @@ mod engine;
 extern crate lazy_static;
 #[macro_use]
 extern crate bitflags;
-
-enum EmulatorState {
-    Menu,
-
-    TypingPath,
-
-    Loading { game_path: PathBuf },
-
-    Running { 
-        emulator_instance: EmulatorInstance, 
-        audio: Option<(AudioOutput, u32)>, 
-        #[cfg(feature = "debug_log")]
-        logger: Box<dyn FnMut(&mut CPU)>
-    }
-}
 
 fn window_conf() -> Conf {
     Conf {
@@ -71,81 +61,6 @@ async fn main() {
 
     let frame_time: std::time::Duration = std::time::Duration::from_secs_f64(1.0/60.0);
     let mut frame_deadline: std::time::Instant = std::time::Instant::now();
-    let skin: macroquad::ui::Skin = create_customized_skin(MULTIPLY_RESOLUTION as f32);
-
-    let mut smoothed_fps = 60.0;
-
-    async fn rungame(
-        emulator: &mut EmulatorInstance, 
-        audio: &mut Option<(AudioOutput, u32)>, 
-        #[cfg(feature = "debug_log")]
-        logger: &mut Box<dyn FnMut(&mut CPU)>) {
-
-        //let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
-        //let mut cycles_since_sample: f64 = 0.0;
-
-        //let mut sample_count = 0;
-        //let mut sample_sum = 0.0;
-
-        emulator.cpu.bus.ppu.frame_complete = false;
-
-        while !emulator.cpu.bus.ppu.frame_complete {
-            //emulator.cpu.log_state(&mut log_file);
-
-            #[cfg(feature = "debug_log")]
-            let (_, cycles) = emulator.cpu.step_with_callback(Some(|cpu: &mut CPU| logger(cpu)));
-
-            #[cfg(not(feature = "debug_log"))]
-            let (_, cycles) = emulator.cpu.step();
-
-            if let Some(ref mut audio) = audio {
-                emulator.cpu.bus.sync_audio(cycles, audio);
-            }
-        }
-
-        //at the end of each step, takes the frame buffer and updates the ppu texture with it, therefore rendering a new frame
-        emulator.image.bytes.copy_from_slice(&emulator.cpu.bus.ppu.frame_buffer);
-        emulator.ppu_texture.update(&emulator.image);
-
-        let (source_rect, draw_width, draw_height) = if emulator.hide_overscan {
-            (
-                Some(Rect::new(8.0, 8.0, 240.0, 224.0)),
-                240.0,
-                224.0
-            )
-        } else {
-            (
-                None,
-                256.0,
-                240.0
-            )
-        };
-
-        draw_texture_ex(
-            &emulator.ppu_texture,
-            0.0,
-            0.0,
-            WHITE,
-            DrawTextureParams {
-                dest_size: Some(vec2(
-                    draw_width * (2.0 * MULTIPLY_RESOLUTION as f32), 
-                    draw_height * (2.0 * MULTIPLY_RESOLUTION as f32)
-                )), 
-                source: source_rect,
-                ..Default::default()
-            },
-        );
-        
-        if is_key_pressed(KeyCode::F1) {
-            //TODO ver um jeito de ajustar para escalar a janela para o tamanho certo
-            // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
-            emulator.show_debug_info = !emulator.show_debug_info;
-        }
-        if is_key_pressed(KeyCode::Period) {
-            emulator.cpu.bus.ppu.color_palette.cycle_palettes();
-        }
-
-    }
 
     loop {
         match &mut state {
@@ -240,6 +155,7 @@ async fn main() {
                     logger
                 };
             }
+
             EmulatorState::Running { 
                 ref mut emulator_instance, 
                 ref mut audio, 
@@ -247,16 +163,17 @@ async fn main() {
                 ref mut logger 
             } => {
 
+                map_default_inputs(emulator_instance);
                 clear_background(BLACK);
 
                 if !emulator_instance.is_paused {
-                    rungame(emulator_instance, audio, #[cfg(feature = "debug_log")] logger).await;
+                    emulator_instance.rungame(audio, #[cfg(feature = "debug_log")] logger).await;
 
-                    smoothed_fps = (smoothed_fps * 0.9) + (get_fps() as f32 * 0.1);
+                    emulator_instance.smoothed_fps = (emulator_instance.smoothed_fps * 0.9) + (get_fps() as f32 * 0.1);
                     draw_text(&get_fps().to_string(), 10.0, 20.0, 30.0, WHITE);
                     emulator_instance.show_debug_info();
                 } else {
-                    if render_pause_menu(emulator_instance, Some(&skin)) {
+                    if render_pause_menu(emulator_instance) {
                         state = EmulatorState::Menu
                     }
                 }

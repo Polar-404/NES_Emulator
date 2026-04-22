@@ -3,8 +3,8 @@ use macroquad::prelude::*;
 
 use crate::engine::instance::EmulatorInstance;
 
-
-fn update_join(emulator_instance: &mut EmulatorInstance) {
+/// uses the default values to map most of the inputs of the emulator instance
+pub fn map_default_inputs(emulator_instance: &mut EmulatorInstance) {
     emulator_instance.cpu.bus.joypad_1.set_button(
         JoyPadButtons::A, is_key_down(KeyCode::J) || is_key_down(KeyCode::Z) 
     );
@@ -40,4 +40,20 @@ fn update_join(emulator_instance: &mut EmulatorInstance) {
     if is_key_pressed(KeyCode::Escape) {
         emulator_instance.is_paused = !emulator_instance.is_paused;
     }
+    if is_key_pressed(KeyCode::Period) {
+        emulator_instance.cpu.bus.ppu.color_palette.cycle_palettes();
+    }
+
+    if is_key_pressed(KeyCode::F1) {
+        //TODO ver um jeito de ajustar para escalar a janela para o tamanho certo
+        // ou simplesmente colocar uma tela preta no lugar das infos quando eu esconder elas
+        emulator_instance.show_debug_info = !emulator_instance.show_debug_info;
+    }
+}
+
+///updates a certain **"Gamepad Button"**, it can map multiple diferent keyboard buttons to the same gamepad button
+pub fn update_gamepad_button(emulator_instance: &mut EmulatorInstance, joypad_btn: JoyPadButtons, target_keys: &[KeyCode]) {
+    let keys = target_keys.iter().any(|&key| is_key_down(key));
+
+    emulator_instance.cpu.bus.joypad_1.set_button(joypad_btn, keys);
 }

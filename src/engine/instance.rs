@@ -1,12 +1,16 @@
 use std::path::{Path, PathBuf};
 
+use arboard::Clipboard;
 use macroquad::prelude::*;
+
 use crate::engine::config::MULTIPLY_RESOLUTION;
 
 use crate::{
     cpu::cpu::CPU,
     engine::stats::PerfomanceStats,
     memory,
+    ui::pause_menu::*,
+    apu::audio::AudioOutput,
 };
 
 pub struct EmulatorInstance {
@@ -25,8 +29,11 @@ pub struct EmulatorInstance {
     stats: PerfomanceStats,
     hide_overscan: bool,
 
+    pub skin: macroquad::ui::Skin,
+    pub smoothed_fps: f32,
+
 } impl EmulatorInstance {
-    fn new(game_path: PathBuf) -> Result<EmulatorInstance, Box<dyn std::error::Error>> {
+    pub fn new(game_path: PathBuf) -> Result<EmulatorInstance, Box<dyn std::error::Error>> {
         let mapper = memory::bus::load_rom_from_file(Path::new(game_path.as_path()))?;
         let mut cpu = CPU::new(mapper);
         
@@ -53,6 +60,10 @@ pub struct EmulatorInstance {
 
             debug_frame_counter: 0,
             cached_debug_text: Vec::new(),
+            
+            skin: create_customized_skin(MULTIPLY_RESOLUTION as f32),
+
+            smoothed_fps: 60.0,
         })
     }
     pub fn show_debug_info(&mut self) {
@@ -76,7 +87,7 @@ pub struct EmulatorInstance {
         }
     }
 
-    fn push_formated_stats(&mut self) {
+    pub fn push_formated_stats(&mut self) {
         self.stats.update_status();
 
         self.cached_debug_text.clear();
@@ -106,5 +117,67 @@ pub struct EmulatorInstance {
         self.cached_debug_text.push(format!("VRAM: {:#06x} | T-VRAM: {:#06x}", self.cpu.bus.ppu.v.addr, self.cpu.bus.ppu.t.addr));
         self.cached_debug_text.push(format!("PPU Cycle: {} | Scanline: {}", self.cpu.bus.ppu.cycle, self.cpu.bus.ppu.scanline));
         self.cached_debug_text.push(format!("Frame Complete: {:?}", self.cpu.bus.ppu.frame_complete));
+    }
+
+    pub async fn rungame(
+        &mut self, 
+        audio: &mut Option<(AudioOutput, u32)>, 
+        #[cfg(feature = "debug_log")]
+        logger: &mut Box<dyn FnMut(&mut CPU)>) {
+
+        //let mut log_file = std::fs::File::create("nestest_output.log").unwrap();
+        //let mut cycles_since_sample: f64 = 0.0;
+
+        //let mut sample_count = 0;
+        //let mut sample_sum = 0.0;
+
+        self.cpu.bus.ppu.frame_complete = false;
+
+        while !self.cpu.bus.ppu.frame_complete {
+            //self.cpu.log_state(&mut log_file);
+
+            #[cfg(feature = "debug_log")]
+            let (_, cycles) = self.cpu.step_with_callback(Some(|cpu: &mut CPU| logger(cpu)));
+
+            #[cfg(not(feature = "debug_log"))]
+            let (_, cycles) = self.cpu.step();
+
+            if let Some(ref mut audio) = audio {
+                self.cpu.bus.sync_audio(cycles, audio);
+            }
+        }
+
+        //at the end of each step, takes the frame buffer and updates the ppu texture with it, therefore rendering a new frame
+        self.image.bytes.copy_from_slice(&self.cpu.bus.ppu.frame_buffer);
+        self.ppu_texture.update(&self.image);
+
+        let (source_rect, draw_width, draw_height) = if self.hide_overscan {
+            (
+                Some(Rect::new(8.0, 8.0, 240.0, 224.0)),
+                240.0,
+                224.0
+            )
+        } else {
+            (
+                None,
+                256.0,
+                240.0
+            )
+        };
+
+        draw_texture_ex(
+            &self.ppu_texture,
+            0.0,
+            0.0,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(
+                    draw_width * (2.0 * MULTIPLY_RESOLUTION as f32), 
+                    draw_height * (2.0 * MULTIPLY_RESOLUTION as f32)
+                )), 
+                source: source_rect,
+                ..Default::default()
+            },
+        );
     }
 }
