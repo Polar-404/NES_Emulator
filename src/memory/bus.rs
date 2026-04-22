@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::apu::apu::APU;
 use crate::apu::audio::AudioOutput;
+use crate::memory::game_save::GameSave;
 use crate::memory::mappers::*;
 use crate::ppu::ppu::PPU;
 use crate::memory::joypads::JoyPad;
@@ -289,8 +290,8 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
 
     match mapper_match {
         0 => Ok(wrap_in_pointers(InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
-        1 => Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data))),
-        4 => Ok(wrap_in_pointers(InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type))),
+        1 => Ok(wrap_in_pointers(InesMapper001::new(prg_rom_data, chr_rom_data, GameSave::new(path)))),
+        4 => Ok(wrap_in_pointers(InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
 
         _ => Err(format!("Mapper {} is not supported yet", mapper_match).into())
     }

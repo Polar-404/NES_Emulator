@@ -115,9 +115,11 @@ impl Mapper for InesMapper000 {
 
 // TO DO ADD DOCUMENTATION
 pub struct InesMapper001 {
+    /// $6000-$7FFF
+    game_save: GameSave, 
+
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
-    prg_ram: Box<[u8]>,
 
     chr_ram: Box<[u8]>,
 
@@ -130,13 +132,13 @@ pub struct InesMapper001 {
     prg_bank: u8,
 }
 impl InesMapper001 {
-    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>) -> Self {
+    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, game_save: GameSave) -> Self {
         let chr_ram = if chr_rom.is_empty() { vec![0; 8192].into() } else { vec![].into() };
         
         Self {
+            game_save,
             prg_rom,
             chr_rom,
-            prg_ram: vec![0; 8192].into_boxed_slice(), // $6000-$7FFF
             chr_ram,
             
             shift_register: 0x10, // O MMC1 starts with 1 at his fourth bit
@@ -200,7 +202,7 @@ impl Mapper for InesMapper001 {
     fn read(&self, addr: u16) -> u8 {
         match addr {
             0x6000..=0x7FFF => {
-                self.prg_ram[(addr - 0x6000) as usize]
+                self.game_save.read(addr)
             }
             0x8000..=0xFFFF => {
                 let mapped_addr = self.prg_addr(addr);
@@ -212,7 +214,7 @@ impl Mapper for InesMapper001 {
     fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x6000..=0x7FFF => {
-                self.prg_ram[(addr - 0x6000) as usize] = val;
+                self.game_save.write(addr, val);
 
                 if addr == 0x6000 && val != 0x80 {
 
@@ -313,12 +315,13 @@ impl Mapper for InesMapper001 {
 /// PPU **$1C00-$1FFF** (or $0C00-$0FFF): 1 KB switchable CHR bank
 
 pub struct InesMapper004 {
-    pub game_save: GameSave,
+
+    /// $6000-$7FFF
+    game_save: GameSave,
 
 
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
-    prg_ram: Box<[u8]>,
     chr_ram: Box<[u8]>,
 
     mirroring: Mirroring,
@@ -372,7 +375,6 @@ impl InesMapper004 {
             game_save,
             prg_rom,
             chr_rom,
-            prg_ram: vec![0; 8192].into_boxed_slice(),
             chr_ram,
 
             mirroring,
@@ -470,7 +472,7 @@ impl Mapper for InesMapper004 {
     fn read(&self, addr: u16) -> u8 {
         match addr {
             0x6000..=0x7FFF => {
-                self.prg_ram[(addr - 0x6000) as usize]
+                self.game_save.read(addr)
             }
             0x8000..=0xFFFF => {
                 //calculates the actual offset within the ROM based on the MMC3 registers
@@ -490,7 +492,7 @@ impl Mapper for InesMapper004 {
         match addr {
             0x6000..=0x7FFF => {
                 if self.prg_ram_chip_enable && !self.prg_ram_w_protection {
-                    self.prg_ram[(addr - 0x6000) as usize] = val;
+                    self.game_save.write(addr, val);
                 }
             }
             0x8000..=0x9FFF => {
