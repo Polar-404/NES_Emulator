@@ -2,17 +2,18 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::memory::mappers::{Mapper, Mirroring};
+use crate::memory::mapper_base::*;
 
 pub struct TestMapper {
     ram: [u8; 0x0800],
     prg_rom: Vec<u8>,
-    chr_rom: [u8; 0x2000]
+    chr_rom: [u8; 0x2000],
+    mirroring: Mirroring,
 }
 
 impl TestMapper {
     #[allow(unused)] // test only mapper
-    pub fn new(program: Vec<u8>) -> Rc<RefCell<dyn Mapper>> {
+    pub fn new(program: Vec<u8>, mirroring: Mirroring) -> Rc<RefCell<dyn Mapper>> {
         let ram = [0; 0x0800];
         
         let mut prg_rom_vec = vec![0; 0x8000];
@@ -36,6 +37,7 @@ impl TestMapper {
                     ram,
                     prg_rom: prg_rom_vec,
                     chr_rom,
+                    mirroring
                 }
             )
         )
@@ -68,6 +70,6 @@ impl Mapper for TestMapper {
     
     ///Unused
     fn mirroring(&self) -> Mirroring {
-        Mirroring::Horizontal
+        self.mirroring
     }
 }

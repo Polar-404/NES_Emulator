@@ -3,7 +3,7 @@
 
 use crate::cpu::opcodes;
 use crate::memory::bus::BUS; 
-use crate::memory::mappers::*;
+use crate::memory::mapper_base::*;
 
 use std::{collections::HashMap};
 
@@ -1065,14 +1065,22 @@ impl CPU {
 ///Simple tests module for the cpu
 #[cfg(test)]
 mod test {
-    
-    use crate::memory::dummy_mapper::TestMapper;
+    #[allow(unused)]
+    use crate::memory::mapper_base::*;
+
+    use crate::memory::mappers::dummy_mapper::TestMapper;
     use super::*;
 
     impl CPU {
         pub fn run_test(&mut self) {
             self.reset_interrupt();
-            self.step();
+            loop {
+                let opcode = self.bus.mem_read(self.program_counter);
+                
+                if opcode == 0x00 { break; }
+
+                self.step();
+            }
         }
     }
 
@@ -1080,7 +1088,7 @@ mod test {
     #[test]
     fn test_0xa9_lda_immediate() {
 
-        let mapper = TestMapper::new(vec![0xa9, 0x05, 0x00]);
+        let mapper = TestMapper::new(vec![0xa9, 0x05, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1090,7 +1098,7 @@ mod test {
     }
     #[test]
     fn test_0xa9_lda_zero_flag() {
-        let mapper = TestMapper::new(vec![0xa9, 0x00, 0x00]);
+        let mapper = TestMapper::new(vec![0xa9, 0x00, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1099,7 +1107,7 @@ mod test {
   
     #[test]
     fn test_lda_from_memory() {
-        let mapper = TestMapper::new(vec![0xA5, 0x10, 0x00]);
+        let mapper = TestMapper::new(vec![0xA5, 0x10, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0x55);
@@ -1110,7 +1118,7 @@ mod test {
     }
     #[test]
     fn test_ldx_from_memory() {
-        let mapper = TestMapper::new(vec![0xA6, 0x10, 0x00]);
+        let mapper = TestMapper::new(vec![0xA6, 0x10, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0x55);
@@ -1122,7 +1130,7 @@ mod test {
 
     #[test]
     fn test_ldy_from_memory() {
-        let mapper = TestMapper::new(vec![0xA4, 0x10, 0x00]);
+        let mapper = TestMapper::new(vec![0xA4, 0x10, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0x55);
@@ -1135,7 +1143,7 @@ mod test {
     // ------------------- TAX ------------------
     #[test]
     fn test_0xaa_tax() {
-        let mapper = TestMapper::new(vec![0xa9, 0x0a, 0xAA, 0x00]);
+        let mapper = TestMapper::new(vec![0xa9, 0x0a, 0xAA, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test(); //primeiro inserir LDA, no register A, o valor 0x0a(q é 10)
@@ -1145,7 +1153,7 @@ mod test {
     // ------------------- INX ------------------
     #[test]
     fn test_0xe8_inx() {
-        let mapper = TestMapper::new(vec![0xE8, 0x00]);
+        let mapper = TestMapper::new(vec![0xE8, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1155,7 +1163,7 @@ mod test {
     // --------------- WRITE MEMORY --------------------
     #[test]
     fn test_write_mem() {
-        let mapper = TestMapper::new(vec![]);
+        let mapper = TestMapper::new(vec![], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write_u16(0x1fef, 0xef);
@@ -1166,7 +1174,7 @@ mod test {
     #[test]
     // -------------------- ADC ------------------------
     fn test_adc_from_immediate() {
-        let mapper = TestMapper::new(vec![0x69, 0x10, 0x69, 0x32]);
+        let mapper = TestMapper::new(vec![0x69, 0x10, 0x69, 0x32], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         //cpu.bus.mem_write(0x69, data);
@@ -1178,7 +1186,8 @@ mod test {
         let mapper = TestMapper::new(vec![
         0xa5, 0x10, // LDA ZeroPage, operando 0x10
         0x65, 0x20, // ADC ZeroPage, operando 0x20
-        0x00]);
+        0x00], 
+        Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0xab); //carrega 0xab
@@ -1190,7 +1199,7 @@ mod test {
     }
     #[test]
     fn test_adc_carry_flag() {
-        let mapper = TestMapper::new(vec![0xa5, 0x10, 0x65, 0x20, 0x00]);
+        let mapper = TestMapper::new(vec![0xa5, 0x10, 0x65, 0x20, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0xff);
@@ -1203,7 +1212,7 @@ mod test {
     }
     #[test]
     fn test_adc_carry_sum() {
-        let mapper = TestMapper::new(vec![0xa5, 0x10, 0x65, 0x20, 0x69, 0x50, 0x00]);
+        let mapper = TestMapper::new(vec![0xa5, 0x10, 0x65, 0x20, 0x69, 0x50, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0xff);
@@ -1226,7 +1235,7 @@ mod test {
         //const OVERFLOW          = 0b01000000;
         //const NEGATIVE          = 0b10000000;
 
-        let mapper = TestMapper::new(vec![]);
+        let mapper = TestMapper::new(vec![], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.status = CpuFlags::from_bits_truncate(0b0100_1101);
@@ -1247,7 +1256,7 @@ mod test {
 
     #[test]
     fn test_set_flags() {
-        let mapper = TestMapper::new(vec![0x38, 0xF8, 0x78]);
+        let mapper = TestMapper::new(vec![0x38, 0xF8, 0x78], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1258,7 +1267,7 @@ mod test {
     }
     #[test]
     fn test_compare() {
-        let mapper = TestMapper::new(vec![0xa9, 0x2f, 0xC5, 0x10,]);
+        let mapper = TestMapper::new(vec![0xa9, 0x2f, 0xC5, 0x10,], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0x2f);
@@ -1270,7 +1279,7 @@ mod test {
     }
     #[test]
     fn test_and_instruction() {
-        let mapper = TestMapper::new(vec![0xa9, 0x1A, 0x25, 0x10,]);
+        let mapper = TestMapper::new(vec![0xa9, 0x1A, 0x25, 0x10,], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
         
         cpu.bus.mem_write(0x10, 0x5C); //0x5C == 0b0101_1100
@@ -1280,7 +1289,7 @@ mod test {
     }
     #[test]
     fn test_asl_instruction() {
-        let mapper = TestMapper::new(vec![0x06, 0x10]);
+        let mapper = TestMapper::new(vec![0x06, 0x10], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0b0001_0000);
@@ -1289,21 +1298,21 @@ mod test {
     }
     #[test]
     fn test_bcc_instruction() {
-        let mapper = TestMapper::new(vec![0x90, 0x03, 0x00, 0x00, 0x00, 0xa9, 0xff, 0x00 ]);
+        let mapper = TestMapper::new(vec![0x90, 0x03, 0x00, 0x00, 0x00, 0xa9, 0xff, 0x00 ], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         // |0x38 - sec | 0x90 - bcc | 0x18 - clc |
         cpu.run_test();
         assert_eq!(cpu.register_a, 0xff);
 
-        let mapper = TestMapper::new(vec![0x38, 0x90, 0x02,  0xa9, 0xab, 0x00,]);
+        let mapper = TestMapper::new(vec![0x38, 0x90, 0x02,  0xa9, 0xab, 0x00,], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
         cpu.run_test();
         assert_eq!(cpu.register_a, 0xab);
     }
     #[test]
     fn test_bit_instruction() {
-        let mapper = TestMapper::new(vec![0xa9, 0xf8, 0x24, 0x20]);
+        let mapper = TestMapper::new(vec![0xa9, 0xf8, 0x24, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x20, 0xf3);
@@ -1314,7 +1323,7 @@ mod test {
     }
     #[test]
     fn test_decrement_memory() {
-        let mapper = TestMapper::new(vec![0xc6, 0x50, 0x00]);
+        let mapper = TestMapper::new(vec![0xc6, 0x50, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x50, 0x0f);
@@ -1323,7 +1332,7 @@ mod test {
     }
     #[test]
     fn test_decrement_register() {
-        let mapper = TestMapper::new(vec![0xA2, 0x0f, 0xCA, 0xA0, 0x09, 0x88, 0x00]);
+        let mapper = TestMapper::new(vec![0xA2, 0x0f, 0xCA, 0xA0, 0x09, 0x88, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1333,7 +1342,7 @@ mod test {
     }
     #[test]
     fn test_increment_mem() {
-        let mapper = TestMapper::new(vec![0xE6, 0x10, 0x00]);
+        let mapper = TestMapper::new(vec![0xE6, 0x10, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x10, 0x0e);
@@ -1342,7 +1351,7 @@ mod test {
     }
     #[test]
     fn test_jump_abs() {
-        let mapper = TestMapper::new(vec![0x4c, 0x05, 0x80, 0xa9, 0x10, 0xA2, 0x30, 0x00]);
+        let mapper = TestMapper::new(vec![0x4c, 0x05, 0x80, 0xa9, 0x10, 0xA2, 0x30, 0x00], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1352,7 +1361,7 @@ mod test {
     }
     #[test]
     fn test_pha() {
-        let mapper = TestMapper::new(vec![0xa9, 0xe0, 0x48]);
+        let mapper = TestMapper::new(vec![0xa9, 0xe0, 0x48], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
         
         cpu.run_test();
@@ -1361,7 +1370,7 @@ mod test {
     #[test]
     //it doenst purposefully panic anymore
     fn test_pla_at_empty_stack() {
-        let mapper = TestMapper::new(vec![0x68, 0x00]); 
+        let mapper = TestMapper::new(vec![0x68, 0x00], Mirroring::Horizontal); 
         let mut cpu = CPU::new(mapper);
 
         cpu.stack_pointer = 0xFF;
@@ -1376,7 +1385,7 @@ mod test {
 
     #[test]
     fn test_pla_correctly() {
-        let mapper = TestMapper::new(vec![0xa9, 0xe0, 0x48, 0xa9, 0xd0, 0x48, 0xa9, 0x10, 0x68]);
+        let mapper = TestMapper::new(vec![0xa9, 0xe0, 0x48, 0xa9, 0xd0, 0x48, 0xa9, 0x10, 0x68], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1384,7 +1393,7 @@ mod test {
     }
     #[test]
     fn test_eor() {
-        let mapper = TestMapper::new(vec![0xa9, 0xA2, 0x45, 0x20]);
+        let mapper = TestMapper::new(vec![0xa9, 0xA2, 0x45, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x20, 0xe0);
@@ -1395,16 +1404,16 @@ mod test {
     fn test_jsr() {
         let mapper = TestMapper::new(vec![
             0x20, 0x34, 0x12, 0x00  // JSR $1234
-        ]);
+        ], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
-        assert_eq!(cpu.program_counter, 0x1235);
+        assert_eq!(cpu.program_counter, 0x1234);
         assert_eq!(cpu.stack_pointer, 0xFB);
     }
     #[test]
     fn test_register_write() {
-        let mapper = TestMapper::new(vec![0xA2, 0xe0, 0x86, 0x20]);
+        let mapper = TestMapper::new(vec![0xA2, 0xe0, 0x86, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
         
         cpu.run_test();
@@ -1413,7 +1422,7 @@ mod test {
     }
     #[test]
     fn test_lsr() {
-        let mapper = TestMapper::new(vec![0x46, 0x20]);
+        let mapper = TestMapper::new(vec![0x46, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x20, 0xe1);
@@ -1423,7 +1432,7 @@ mod test {
     }
     #[test]
     fn test_ora_from_mem() {
-        let mapper = TestMapper::new(vec![0xa9, 0xa1, 0x05, 0x20]);
+        let mapper = TestMapper::new(vec![0xa9, 0xa1, 0x05, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x20, 0xe0);
@@ -1432,7 +1441,7 @@ mod test {
     }
     #[test]
     fn test_ora_from_immidiate() {
-        let mapper = TestMapper::new(vec![0xa9, 0xa1, 0x09, 0xe0]);
+        let mapper = TestMapper::new(vec![0xa9, 0xa1, 0x09, 0xe0], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1440,7 +1449,7 @@ mod test {
     }
     #[test]
     fn test_php() {
-        let mapper = TestMapper::new(vec![0x08]);
+        let mapper = TestMapper::new(vec![0x08], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1448,7 +1457,7 @@ mod test {
     }
     #[test]
     fn test_sbc() {
-        let mapper = TestMapper::new(vec![0xa9, 0xe0, 0xe5, 0x20]);
+        let mapper = TestMapper::new(vec![0x38, 0xa9, 0xe0, 0xe5, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x20, 0x02);
@@ -1457,21 +1466,21 @@ mod test {
     }
     #[test]
     fn test_rti() {
-        let mapper = TestMapper::new(vec![0x40]);
+        let mapper = TestMapper::new(vec![0x40], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
-        cpu.stack_push(0b0010_0100);
         cpu.stack_push_u16(0x1234);
+        cpu.stack_push(0b0010_0100);
         
         cpu.run_test();
         //println!("{}", cpu.program_counter);
         //println!("{}", cpu.status.bits());
-        assert_eq!(cpu.program_counter, 0x2413); //inverte por causa do little endian
+        assert_eq!(cpu.program_counter, 0x1234);
         assert_eq!(cpu.status.bits(), 0b0010_0100);
     }
     #[test]
     fn test_rol() {
-        let mapper = TestMapper::new(vec![0x26, 0x20]);
+        let mapper = TestMapper::new(vec![0x26, 0x20], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.bus.mem_write(0x20, 0xe0);
@@ -1480,7 +1489,7 @@ mod test {
     }
     #[test]
     fn test_txa() {
-        let mapper = TestMapper::new(vec![0xa2, 0xe0, 0x8a]);
+        let mapper = TestMapper::new(vec![0xa2, 0xe0, 0x8a], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();
@@ -1488,7 +1497,7 @@ mod test {
     }
     #[test]
     fn test_tsx() {
-        let mapper = TestMapper::new(vec![0xba]);
+        let mapper = TestMapper::new(vec![0xba], Mirroring::Horizontal);
         let mut cpu = CPU::new(mapper);
 
         cpu.run_test();

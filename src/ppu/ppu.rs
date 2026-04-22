@@ -1,4 +1,4 @@
-use crate::{memory::mappers::Mapper};
+use crate::{memory::mapper_base::*};
 
 use core::panic;
 use std::{rc::Rc, vec};
@@ -566,11 +566,11 @@ impl PPU {
 
 mod write_registers_tests {
     use super::*;
-    use crate::memory::dummy_mapper::TestMapper;
+    use crate::memory::mappers::dummy_mapper::TestMapper;
 
     #[allow(unused)]
     fn make_ppu() -> PPU {
-        PPU::new(TestMapper::new(vec![]))
+        PPU::new(TestMapper::new(vec![], Mirroring::Horizontal))
     }
 
     #[test]
@@ -636,11 +636,11 @@ mod write_registers_tests {
 }
 mod read_registers_tests {
     use super::*;
-    use crate::memory::dummy_mapper::TestMapper;
+    use crate::memory::mappers::dummy_mapper::TestMapper;
 
     #[allow(unused)]
     fn make_ppu() -> PPU {
-        PPU::new(TestMapper::new(vec![]))
+        PPU::new(TestMapper::new(vec![], Mirroring::Horizontal))
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::memory::mappers::{Mapper, Mirroring};
+use crate::memory::mapper_base::*;
 
 use std::rc::Rc; // Importe Rc
 use std::cell::RefCell;
@@ -109,15 +109,14 @@ impl PPUBUS {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::dummy_mapper::TestMapper;
+    use crate::memory::mappers::dummy_mapper::TestMapper;
 
     fn make_bus_horizontal() -> PPUBUS {
-        PPUBUS::new(TestMapper::new(vec![]))
+        PPUBUS::new(TestMapper::new(vec![], Mirroring::Horizontal))
     }
     
     fn make_bus_vertical() -> PPUBUS {
-        // todo! this should have a personalized option for mirroring
-        PPUBUS::new(TestMapper::new(vec![]))
+        PPUBUS::new(TestMapper::new(vec![], Mirroring::Horizontal))
     }
 
     // ── Palette RAM ──────────────────────────────────────────────────────
@@ -201,6 +200,88 @@ mod tests {
     #[test]
     fn vram_mirror_de_3000_para_2000() {
         let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x2005, 0xAB);
+        assert_eq!(bus.read_ppubus(0x3005), 0xAB);
+    }
+    #[test]
+    fn vertical_palette_escrita_e_leitura_basica() {
+        let mut bus = make_bus_horizontal();
+        bus.write_ppubus(0x3F05, 0x2C);
+        assert_eq!(bus.read_ppubus(0x3F05), 0x2C);
+    }
+
+    #[test]
+    fn vertical_palette_mirror_dentro_do_range_3f00_3fff() {
+        let mut bus = make_bus_vertical();
+        // $3F25 deve espelhar $3F05 (0x25 & 0x1F = 0x05)
+        bus.write_ppubus(0x3F05, 0xAA);
+        assert_eq!(bus.read_ppubus(0x3F25), 0xAA);
+    }
+
+    #[test]
+    fn vertical_palette_mirror_sprite_para_background_em_multiplos_de_4() {
+        let mut bus = make_bus_vertical();
+        // $3F10, $3F14, $3F18, $3F1C espelham $3F00, $3F04, $3F08, $3F0C
+        bus.write_ppubus(0x3F10, 0x11);
+        assert_eq!(bus.read_ppubus(0x3F00), 0x11);
+
+        bus.write_ppubus(0x3F14, 0x22);
+        assert_eq!(bus.read_ppubus(0x3F04), 0x22);
+    }
+
+    #[test]
+    fn vertica_palette_slots_independentes() {
+        let mut bus = make_bus_vertical();
+        for i in 0u8..32 {
+            // pula os que espelham ($10, $14, $18, $1C)
+            if i >= 0x10 && i % 4 == 0 { continue; }
+            bus.write_ppubus(0x3F00 + i as u16, i);
+        }
+        for i in 0u8..32 {
+            if i >= 0x10 && i % 4 == 0 { continue; }
+            assert_eq!(bus.read_ppubus(0x3F00 + i as u16), i);
+        }
+    }
+
+    // ── VRAM — Mirroring vertical ──────────────────────────────────────
+    // A ($2000) = B ($2400)  →  VRAM baixo
+    // C ($2800) = D ($2C00)  →  VRAM alto
+
+    #[test]
+    fn vram_vertical_a_espelha_b() {
+        let mut bus = make_bus_vertical();
+        bus.write_ppubus(0x2000, 0x42);
+        assert_eq!(bus.read_ppubus(0x2400), 0x42);
+    }
+
+    #[test]
+    fn vram_vertical_b_espelha_a() {
+        let mut bus = make_bus_vertical();
+        bus.write_ppubus(0x2400, 0x99);
+        assert_eq!(bus.read_ppubus(0x2000), 0x99);
+    }
+
+    #[test]
+    fn vram_vertical_c_espelha_d() {
+        let mut bus = make_bus_vertical();
+        bus.write_ppubus(0x2800, 0x77);
+        assert_eq!(bus.read_ppubus(0x2C00), 0x77);
+    }
+
+    #[test]
+    fn vram_vertical_ab_independente_de_cd() {
+        let mut bus = make_bus_vertical();
+        bus.write_ppubus(0x2000, 0x11);
+        bus.write_ppubus(0x2800, 0x22);
+        assert_eq!(bus.read_ppubus(0x2000), 0x11);
+        assert_eq!(bus.read_ppubus(0x2800), 0x22);
+    }
+
+    // ── VRAM — mirror de $3000–$3EFF para $2000–$2EFF ───────────────────
+
+    #[test]
+    fn vertical_vram_mirror_de_3000_para_2000() {
+        let mut bus = make_bus_vertical();
         bus.write_ppubus(0x2005, 0xAB);
         assert_eq!(bus.read_ppubus(0x3005), 0xAB);
     }

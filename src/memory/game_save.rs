@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{env, fs, path::{Path, PathBuf}};
 
 pub struct GameSave {
     file_path: PathBuf,
@@ -21,7 +21,18 @@ impl GameSave {
     fn get_save_path(rom_path: &Path) -> PathBuf {
         let game_name = rom_path.file_stem().unwrap_or_default();
 
-        let mut save_path = PathBuf::from("./.saves");
+        let mut save_path = if cfg!(debug_assertions) {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".saves")
+        } else {
+            if let Ok(mut exec_path) = env::current_exe() {
+                exec_path.pop();
+                exec_path.push(".saves");
+                exec_path
+            } else {
+                PathBuf::from("./.saves")
+            }
+        };
+
         let _ = fs::create_dir_all(&save_path);
 
         save_path.push(game_name);

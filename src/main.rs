@@ -13,7 +13,6 @@ use crate::{
 #[cfg(feature = "debug_log")]
 use crate::debug::{cpu_debug, ppu_debug};
 
-
 mod cpu;
 mod memory;
 mod ppu;
@@ -72,6 +71,7 @@ async fn main() {
                     while get_char_pressed().is_some() {}
                 }
             }
+            
             EmulatorState::TypingPath => {
                 state = handle_type_pathing(&mut path_buffer, &mut clipboard)
             }
@@ -95,7 +95,6 @@ async fn main() {
                 #[cfg(feature = "debug_log")]
                 ref mut logger 
             } => {
-
                 // gets user key inputs
                 input_manager.tick(emulator_instance);
                 
