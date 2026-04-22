@@ -1,5 +1,5 @@
 bitflags! {
-    #[derive(Debug, Default, PartialEq, Eq)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct JoyPadButtons: u8 {
         const A         = 0b0000_0001;
         const B         = 0b0000_0010;
