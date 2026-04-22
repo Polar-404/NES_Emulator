@@ -1,0 +1,1 @@
+pub const MULTIPLY_RESOLUTION: i32 = 2;

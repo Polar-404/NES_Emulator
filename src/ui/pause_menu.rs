@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 use macroquad::ui::{hash, root_ui, widgets, Skin};
-use crate::EmulatorInstance;
-use crate::MULTIPLY_RESOLUTION;
+use crate::engine::instance::EmulatorInstance;
+use crate::engine::config::MULTIPLY_RESOLUTION;
 
 pub fn create_customized_skin(res: f32) -> Skin {
     let bg_image = Image::gen_image_color(16, 16, Color::from_rgba(30, 32, 40, 245));
@@ -51,7 +51,8 @@ pub fn create_customized_skin(res: f32) -> Skin {
     }
 }
 
-pub fn render_pause_menu(emu: &mut EmulatorInstance, custom_skin: Option<&Skin>) -> bool {
+pub fn render_pause_menu(emu: &mut EmulatorInstance) -> bool {
+    let custom_skin: Option<&Skin> = Some(&emu.skin);
     let mut return_to_menu: bool = false;
     let res = MULTIPLY_RESOLUTION as f32;
 

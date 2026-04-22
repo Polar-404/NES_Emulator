@@ -1,3 +1,5 @@
+use crate::memory::game_save::GameSave;
+
 #[allow(dead_code)] //TODO temporario só pra ele parar de encher o saco
 
 #[derive(Clone, Copy, Debug)]
@@ -311,6 +313,9 @@ impl Mapper for InesMapper001 {
 /// PPU **$1C00-$1FFF** (or $0C00-$0FFF): 1 KB switchable CHR bank
 
 pub struct InesMapper004 {
+    pub game_save: GameSave,
+
+
     prg_rom: Box<[u8]>,
     chr_rom: Box<[u8]>,
     prg_ram: Box<[u8]>,
@@ -360,10 +365,11 @@ pub struct InesMapper004 {
 }
 
 impl InesMapper004 {
-    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, mirroring: Mirroring) -> Self {
+    pub fn new(prg_rom: Box<[u8]>, chr_rom: Box<[u8]>, mirroring: Mirroring, game_save: GameSave) -> Self {
         let chr_ram = if chr_rom.is_empty() { vec![0; 8192].into() } else { vec![].into() };
 
         InesMapper004 {
+            game_save,
             prg_rom,
             chr_rom,
             prg_ram: vec![0; 8192].into_boxed_slice(),
