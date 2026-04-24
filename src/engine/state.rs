@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    apu::audio::AudioOutput, engine::{input::InputManager, instance::*}
+    engine::instance::EmulatorInstance
 };
 
 pub enum EmulatorState {
@@ -13,8 +13,6 @@ pub enum EmulatorState {
 
     Running { 
         emulator_instance: EmulatorInstance, 
-        audio: Option<(AudioOutput, u32)>, 
-        input_manager: InputManager,
         #[cfg(feature = "debug_log")]
         logger: Box<dyn FnMut(&mut CPU)>,
     }

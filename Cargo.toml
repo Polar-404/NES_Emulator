@@ -14,7 +14,7 @@ sysinfo = "0.30"
 winit = "0.30"
 glutin = "0.32"
 glutin-winit = "0.5"
-glow = "0.13"
+glow = "0.16"
 egui = "0.31"
 egui_glow = { version = "0.31", features = ["winit"] }
 egui_dock = "0.15"
