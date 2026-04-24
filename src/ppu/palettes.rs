@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct NESColor {
     pub r: u8,
@@ -5,7 +7,7 @@ pub struct NESColor {
     pub b: u8,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default)]
 pub enum PaletteTheme {
     #[default]
     DefaultNtsc,

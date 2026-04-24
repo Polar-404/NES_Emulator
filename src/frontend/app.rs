@@ -7,15 +7,16 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::engine::{
-    state::EmulatorState
+use crate::{
+    engine::state::EmulatorState, 
+    frontend::glstate::GLState,
 };
 
 use std::sync::Arc;
 
 pub struct App {
     window: Option<Arc<Window>>,
-    gl_state: Option<GlState>,        // glutin + glow
+    gl_state: Option<GLState>,        // glutin + glow
     egui_glow: Option<EguiGlow>,      // egui rendering
     dock_state: DockState<Tab>,
     emulator_state: EmulatorState,
@@ -44,6 +45,11 @@ impl ApplicationHandler for App {
                 )
             )
         );
+        let gl_state = GLState::new(&window);
+
+        let egui_glow = EguiGlow::new(event_loop, gl, shader_version, native_pixels_per_point, dithering);
+
+        
     }
     fn window_event(
             &mut self,
