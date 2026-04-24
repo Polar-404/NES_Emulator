@@ -51,13 +51,13 @@ impl GLState {
             gl_display.create_window_surface(&gl_config, &surface_attrs).unwrap()
         };
 
+        let gl_context = not_current_ctx.make_current(&gl_surface).unwrap();
+
         let gl = Arc::new(unsafe {
             glow::Context::from_loader_function_cstr(|s| {
                 gl_display.get_proc_address(s) as *const _
             })
         });
-
-        let gl_context = not_current_ctx.make_current(&gl_surface).unwrap();
 
         Self { gl, gl_context, gl_surface }
     }
