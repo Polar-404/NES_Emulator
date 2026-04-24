@@ -5,6 +5,7 @@ nestest.log
 src/nestest_output.log
 .vscode/launch.json
 flamegraph.svg
+Cargo.lock
 
 #folders
 target/

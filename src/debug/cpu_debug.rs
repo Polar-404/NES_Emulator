@@ -1,8 +1,7 @@
 use std::{
     fmt::{Display, Formatter, Result},
-    fs::File, 
     io::{
-        Write, BufWriter
+        Write,
     }
 };
 

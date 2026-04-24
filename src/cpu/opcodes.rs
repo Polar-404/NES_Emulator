@@ -1,5 +1,5 @@
 use crate::cpu::cpu::AddressingMode;
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::OnceCell, collections::HashMap, sync::{Arc, OnceLock}};
 
 #[allow(dead_code)]
 pub struct OpCode {
@@ -21,10 +21,13 @@ impl OpCode {
     }
 }
 
+pub static CPU_OPS_CODES: OnceLock<Arc<[OpCode]>> = OnceLock::new();
+pub static OPCODES_MAP: OnceLock<HashMap<u8, &'static OpCode>> = OnceLock::new();
+
 //lazy_static macro needed to inicialize values that need heap alocated memory as static
 //such as a vector of "opcode::new()"
-lazy_static! {
-    pub static ref CPU_OPS_CODES: Arc<[OpCode]> = {
+pub fn cpu_ops_codes() -> &'static Arc<[OpCode]> {
+    CPU_OPS_CODES.get_or_init(|| {
         let opcodes = vec![
             OpCode::new(0x00, "BRK", 1, 7, AddressingMode::NoneAddressing),
             OpCode::new(0xaa, "TAX", 1, 2, AddressingMode::NoneAddressing),
@@ -254,16 +257,15 @@ lazy_static! {
 
         ];
         opcodes.into_boxed_slice().into()
-    };
-    
-    ///Integrates every instruction into a HashMap, **passing it's hexadecimal code as it's key** 
-    /// 
-    /// and all the other relevant information such as addressing mode, cicles, and assembly name
-    pub static ref OPCODES_MAP: HashMap<u8, &'static OpCode> = {
+    })
+}
+
+pub fn opcodes_map() -> &'static HashMap<u8, &'static OpCode> {
+    OPCODES_MAP.get_or_init(|| {
         let mut map = HashMap::new();
-        for cpline in CPU_OPS_CODES.iter() {
+        for cpline in cpu_ops_codes().iter() {
             map.insert(cpline.code, cpline);
         }
         map
-    };
+    })
 }
