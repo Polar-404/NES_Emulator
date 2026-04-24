@@ -1,4 +1,5 @@
 use egui_dock::{TabViewer};
+use crate::engine::config::EmulatorConfig;
 use crate::engine::instance::EmulatorInstance;
 
 use crate::frontend::panels::cpu_viewer::render_cpu_viewer;
@@ -15,6 +16,7 @@ pub enum Tab {
 pub struct NesTabViewer<'a> {
     pub nes_texture: Option<egui::TextureId>,
     pub emulator: Option<&'a EmulatorInstance>,
+    pub config: EmulatorConfig,
 }
 
 impl TabViewer for NesTabViewer<'_> {
@@ -34,12 +36,39 @@ impl TabViewer for NesTabViewer<'_> {
             Tab::Emulator => {
                 if let Some(tex_id) = self.nes_texture {
                     let available = ui.available_size();
+
+                    let (width, height) = if self.config.hide_overscan {
+                        (240.0f32, 224.0f32)
+                    } else {
+                        (256.0f32, 240.0f32)
+                    };
+
+                    let scale = (available.x / width).min(available.y / height);
+                    let size = egui::vec2(width * scale, height * scale);
+
+                    let uv = if self.config.hide_overscan {
+                        egui::Rect::from_min_max(
+                            egui::pos2(8.0 / 256.0,   8.0 / 240.0),
+                            egui::pos2(248.0 / 256.0, 232.0 / 240.0),
+                        )
+                    } else {
+                        egui::Rect::from_min_max(
+                            egui::pos2(0.0, 0.0),
+                            egui::pos2(1.0, 1.0)
+                        )
+                    };
+
+                    let (rect, _response) = ui.allocate_exact_size(available, egui::Sense::hover());
                     
-                    let scale = (available.x / 256.0).min(available.y / 240.0);
-                    let size = egui::vec2(256.0 * scale, 240.0 * scale);
-                    ui.centered_and_justified(|ui| {
-                        ui.image(egui::load::SizedTexture::new(tex_id, size));
-                    });
+                    let offset = (available - size) / 2.0;
+                    let image_rect = egui::Rect::from_min_size(rect.min + offset, size);
+
+                    ui.painter().image(
+                        tex_id,
+                        image_rect,
+                        uv,
+                        egui::Color32::WHITE
+                    );
                 } else {
                     ui.centered_and_justified(|ui| {
                         ui.label("Waiting to start video system...");
