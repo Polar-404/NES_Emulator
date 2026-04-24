@@ -4,20 +4,25 @@ use egui_glow::EguiGlow;
 use glow::HasContext;
 
 use winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop},
-    window::{Window, WindowId},
+    application::ApplicationHandler, event::{ElementState, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
 };
 
 use crate::{
-    engine::instance::EmulatorInstance, 
+    apu::audio::AudioOutput, 
+    engine::{
+        config::EmulatorConfig, 
+        instance::EmulatorInstance, 
+        input::*,
+    }, 
     frontend::{
-        dock_state::{NesTabViewer, Tab}, glstate::GLState, nes_texture::NesTexture, panels::create_initial_dock_state
+        dock_state::{NesTabViewer, Tab}, 
+        glstate::GLState, 
+        nes_texture::NesTexture, 
+        panels::create_initial_dock_state
     }
 };
 
-use std::{sync::Arc};
+use std::{sync::Arc, time::{Duration, Instant}};
 
 pub struct App {
     window: Option<Arc<Window>>,
@@ -27,6 +32,12 @@ pub struct App {
 
     nes: Option<EmulatorInstance>,
     nes_texture: Option<NesTexture>,
+
+    audio: Option<(AudioOutput, u32)>,
+    input_state: ControllerState,
+
+    config: EmulatorConfig,
+    instant: Instant,
 }
 impl App {
     pub fn new() -> Self {
@@ -38,6 +49,17 @@ impl App {
 
             nes: None,
             nes_texture: None,
+
+            audio: AudioOutput::new(44100),
+            input_state: ControllerState {
+                a: false, b: false,
+                up: false, down: false,
+                left: false, right: false,
+                start: false, select: false,
+            },
+
+            config: EmulatorConfig::default(),
+            instant: Instant::now(),
         }
     }
 }
@@ -63,18 +85,61 @@ impl ApplicationHandler for App {
         self.egui_glow = Some(egui_glow);
     }
     fn window_event(
-            &mut self,
-            event_loop: &ActiveEventLoop,
-            window_id: WindowId,
-            event: WindowEvent,
-        ) {
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+
+        // 1. CAPTURING KEYBOARD STATE
+        if let WindowEvent::KeyboardInput { event, .. } = &event {
+            if let PhysicalKey::Code(keycode) = event.physical_key {
+                let is_pressed = event.state == ElementState::Pressed;
+                
+                match keycode {
+                    KeyCode::KeyZ => self.input_state.a = is_pressed,
+                    KeyCode::KeyX => self.input_state.b = is_pressed,
+                    KeyCode::KeyC => self.input_state.start = is_pressed,
+                    KeyCode::KeyV => self.input_state.select = is_pressed,
+                    KeyCode::ArrowUp => self.input_state.up = is_pressed,
+                    KeyCode::ArrowDown => self.input_state.down = is_pressed,
+                    KeyCode::ArrowLeft => self.input_state.left = is_pressed,
+                    KeyCode::ArrowRight => self.input_state.right = is_pressed,
+                    _ => {}
+                }
+            }
+        }
+
+        // 2. PASSING IT TO THE GRAPHIC INTERFACE
         if let Some(egui_glow) = &mut self.egui_glow {
             let response = egui_glow.on_window_event(self.window.as_ref().unwrap(), &event);
             if response.consumed { return; }
         }
         
+        // 3. PROCESSING WINDOW AND EMULATOR EVENTS
         match event {
+            WindowEvent::Resized(physical_size) => {
+                let (w, h) = (physical_size.width, physical_size.height);
+                if let Some(gl_state) = &self.gl_state {
+                    gl_state.resize(w, h);
+                    unsafe {
+                        gl_state.gl.viewport(0, 0, w as i32, h as i32);
+                    }
+                }
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
             WindowEvent::RedrawRequested => {
+                let target_frame_time = Duration::from_secs_f64(1.0 / 60.0988);
+                let elapsed = self.instant.elapsed();
+
+                if elapsed < target_frame_time {
+                    std::thread::sleep(target_frame_time - elapsed);
+                }
+                
+                self.instant = Instant::now();
+
                 let gl_state = self.gl_state.as_ref().unwrap();
                 let egui_glow = self.egui_glow.as_mut().unwrap();
                 let window = self.window.as_ref().unwrap();
@@ -90,20 +155,21 @@ impl ApplicationHandler for App {
                 }
 
                 if let Some(emu) = &mut self.nes {
-                    emu.run_frame(&mut None);
+                    // Aplica os inputs capturados no começo da função
+                    apply_input(&mut emu.cpu.bus.joypad_1, &self.input_state, &self.config);
+
+                    emu.run_frame(&mut self.audio);
                     let texture = self.nes_texture.as_ref().unwrap();
                     texture.update(gl, emu.frame_buffer());
                 }
 
                 let mut open_rom_requested = false;   
-
                 let dock = &mut self.dock_state;
                 let nes_ref = self.nes.as_ref();
-                let texture = &self.nes_texture; 
 
                 let texture_opt = self.nes_texture.as_ref().map(|nt| nt.egui_texture_id);
 
-                let repaint_after = egui_glow.run(window, |ctx| { 
+                let _repaint_after = egui_glow.run(window, |ctx| { 
                     egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
                         egui::menu::bar(ui, |ui| {
                             ui.menu_button("File", |ui| {
@@ -129,6 +195,7 @@ impl ApplicationHandler for App {
                     .show(ctx, &mut NesTabViewer {
                         nes_texture: texture_opt,
                         emulator: nes_ref,
+                        config: self.config.clone(),
                     });
                 });
 
@@ -148,13 +215,9 @@ impl ApplicationHandler for App {
                 egui_glow.paint(window);
                 gl_state.swap_buffers();
                 window.request_redraw();
-
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
-            }
-            WindowEvent::KeyboardInput { device_id, event, is_synthetic } => {
-                
             }
             _ => { }
         }

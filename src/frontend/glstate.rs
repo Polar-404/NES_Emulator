@@ -66,7 +66,7 @@ impl GLState {
         self.gl_surface.swap_buffers(&self.gl_context).unwrap()
     }
 
-    fn resize(&self, width: u32, height: u32) {
+    pub fn resize(&self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.gl_surface.resize(
                 &self.gl_context, 

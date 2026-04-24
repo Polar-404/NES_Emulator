@@ -1,12 +1,18 @@
 use glow::HasContext;
 
+use crate::engine::config::EmulatorConfig;
+
 pub struct NesTexture {
     pub gl_texture: glow::Texture,
     pub egui_texture_id: egui::TextureId,
+    width: i32,
+    height: i32,
 }
 
 impl NesTexture {
     pub fn new(gl: &glow::Context, egui_glow: &mut egui_glow::EguiGlow) -> Self {
+        let (width, height) = (256i32, 240i32);
+
         let gl_texture = unsafe {
             let tex = gl.create_texture().unwrap();
             gl.bind_texture(glow::TEXTURE_2D, Some(tex));
@@ -26,14 +32,14 @@ impl NesTexture {
         
         let egui_texture_id = egui_glow.painter.register_native_texture(gl_texture);
 
-        Self { gl_texture, egui_texture_id }
+        Self { gl_texture, egui_texture_id, width, height }
     }
 
-    pub fn update(&self, gl: &glow::Context, pixels: &[u8]) {
+    pub fn update(&self, gl: &glow::Context, pixels: &[u8]) {  
         unsafe {
             gl.bind_texture(glow::TEXTURE_2D, Some(self.gl_texture));
             gl.tex_sub_image_2d(
-                glow::TEXTURE_2D, 0, 0, 0, 256, 240,
+                glow::TEXTURE_2D, 0, 0, 0, self.width, self.height,
                 glow::RGBA, glow::UNSIGNED_BYTE,
                 glow::PixelUnpackData::Slice(Some(pixels)),
             );
