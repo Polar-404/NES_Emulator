@@ -14,9 +14,9 @@ use winit::{
 };
 
 pub struct GLState {
-    gl: Arc<glow::Context>,
-    gl_context: PossiblyCurrentContext,
-    gl_surface: Surface<WindowSurface>,
+    pub gl: Arc<glow::Context>,
+    pub gl_context: PossiblyCurrentContext,
+    pub gl_surface: Surface<WindowSurface>,
 }
 impl GLState {
     pub fn new(event_loop: &ActiveEventLoop, window: &Window) -> Self {
@@ -62,7 +62,7 @@ impl GLState {
         Self { gl, gl_context, gl_surface }
     }
 
-    fn swap_buffers(&self) {
+    pub fn swap_buffers(&self) {
         self.gl_surface.swap_buffers(&self.gl_context).unwrap()
     }
 
