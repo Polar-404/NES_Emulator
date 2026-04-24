@@ -1,30 +1,35 @@
-use egui_dock::DockState;
+use egui::TextureId;
+use egui_dock::{DockArea, DockState, Style};
 use egui_glow::EguiGlow;
 use glow::HasContext;
+
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
+    event_loop::{ActiveEventLoop},
     window::{Window, WindowId},
 };
 
 use crate::{
-    frontend::panels::{Tab, create_initial_dock_state},
-    engine::instance::EmulatorInstance,
-    engine::state::EmulatorState, 
-    frontend::glstate::GLState,
+    engine::instance::EmulatorInstance, 
+    frontend::{
+        dock_state::{Tab, NesTabViewer}, 
+        glstate::GLState, 
+        panels::{create_initial_dock_state}
+    }
 };
 
-use std::sync::Arc;
+use std::{sync::Arc};
 
 pub struct App {
     window: Option<Arc<Window>>,
     gl_state: Option<GLState>,        // glutin + glow
     egui_glow: Option<EguiGlow>,      // egui rendering
     dock_state: DockState<Tab>,
-    emulator_state: EmulatorState,
-}
 
+    nes: Option<EmulatorInstance>,
+    nes_texture: Option<TextureId>,
+}
 impl App {
     pub fn new() -> Self {
         Self {
@@ -32,7 +37,9 @@ impl App {
             gl_state: None,
             egui_glow: None,
             dock_state: create_initial_dock_state(),
-            emulator_state: EmulatorState::Menu,
+
+            nes: None,
+            nes_texture: None,
         }
     }
 }
@@ -63,6 +70,11 @@ impl ApplicationHandler for App {
             window_id: WindowId,
             event: WindowEvent,
         ) {
+        if let Some(egui_glow) = &mut self.egui_glow {
+            let response = egui_glow.on_window_event(self.window.as_ref().unwrap(), &event);
+            if response.consumed { return; }
+        }
+        
         match event {
             WindowEvent::RedrawRequested => {
                 let gl_state = self.gl_state.as_ref().unwrap();
@@ -75,16 +87,16 @@ impl ApplicationHandler for App {
                     gl.clear(glow::COLOR_BUFFER_BIT);
                 }
 
+                let dock = &mut self.dock_state;
+                let nes_ref = self.nes.as_ref();
+                let texture = self.nes_texture; 
+
                 let repaint_after = egui_glow.run(window, |ctx| { 
                     egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
                         egui::menu::bar(ui, |ui| {
                             ui.menu_button("File", |ui| {
-                                if ui.button("Open ROM...").clicked() {
-                                    todo!()
-                                }
-                                if ui.button("Exit").clicked() {
-                                    std::process::exit(0);
-                                }
+                                if ui.button("Open ROM...").clicked() { todo!() }
+                                if ui.button("Exit").clicked() { std::process::exit(0); }
                             });
                             ui.menu_button("NES", |ui| {
                                 if ui.button("Reset").clicked() { /* reset */ }
@@ -96,18 +108,25 @@ impl ApplicationHandler for App {
                             });
                         });
                     });
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        ui.label("NES Framebuffer vai aqui");
+                    
+                    DockArea::new(dock)
+                    .style(Style::from_egui(ctx.style().as_ref()))
+                    .show(ctx, &mut NesTabViewer {
+                        nes_texture: texture,
+                        emulator: nes_ref,
                     });
                 });
 
                 egui_glow.paint(window);
                 gl_state.swap_buffers();
                 window.request_redraw();
-                
+
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
+            }
+            WindowEvent::KeyboardInput { device_id, event, is_synthetic: true } => {
+                
             }
             _ => { }
         }
