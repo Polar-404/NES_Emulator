@@ -13,7 +13,7 @@ use winit::{
     event_loop::ActiveEventLoop, raw_window_handle::HasWindowHandle, window::Window
 };
 
-struct GLState {
+pub struct GLState {
     gl: Arc<glow::Context>,
     gl_context: PossiblyCurrentContext,
     gl_surface: Surface<WindowSurface>,
@@ -60,5 +60,19 @@ impl GLState {
         let gl_context = not_current_ctx.make_current(&gl_surface).unwrap();
 
         Self { gl, gl_context, gl_surface }
+    }
+
+    fn swap_buffers(&self) {
+        self.gl_surface.swap_buffers(&self.gl_context).unwrap()
+    }
+
+    fn resize(&self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            self.gl_surface.resize(
+                &self.gl_context, 
+                NonZeroU32::new(width).unwrap(), 
+                NonZeroU32::new(height).unwrap()
+            );
+        }
     }
 }

@@ -2,8 +2,8 @@ mod cpu;
 mod memory;
 mod ppu;
 mod apu;
-mod ui;
 mod engine;
+mod frontend;
 
 #[cfg(feature = "debug_log")]
 mod debug;
@@ -12,7 +12,7 @@ mod debug;
 extern crate bitflags;
 
 use winit::event_loop::EventLoop;
-use ui::app::App;
+use frontend::app::App;
 
 fn main() {
     let event_loop = EventLoop::new().unwrap();

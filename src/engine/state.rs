@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
-    AudioOutput, engine::{input::InputManager, instance::*}
+    apu::audio::AudioOutput, engine::{input::InputManager, instance::*}
 };
 
 pub enum EmulatorState {
