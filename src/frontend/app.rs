@@ -10,15 +10,13 @@ use winit::{
 use crate::{
     apu::audio::AudioOutput, 
     engine::{
-        config::EmulatorConfig, 
-        instance::EmulatorInstance, 
-        input::*,
+        config::EmulatorConfig, input::*, instance::EmulatorInstance
     }, 
     frontend::{
         dock_state::{NesTabViewer, Tab}, 
         glstate::GLState, 
         nes_texture::NesTexture, 
-        panels::create_initial_dock_state
+        panels::{create_initial_dock_state, pattern_table_viewer::PatternTableViewer}
     }
 };
 
@@ -155,6 +153,7 @@ impl ApplicationHandler for App {
                 }
 
                 if let Some(emu) = &mut self.nes {
+                    emu.cpu.bus.ppu.color_palette = self.config.palette;
                     // Aplica os inputs capturados no começo da função
                     apply_input(&mut emu.cpu.bus.joypad_1, &self.input_state, &self.config);
 
@@ -195,7 +194,8 @@ impl ApplicationHandler for App {
                     .show(ctx, &mut NesTabViewer {
                         nes_texture: texture_opt,
                         emulator: nes_ref,
-                        config: self.config.clone(),
+                        config: &mut self.config,
+                        pattern_viewer: &mut PatternTableViewer::new(),
                     });
                 });
 

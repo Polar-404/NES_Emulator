@@ -3,6 +3,7 @@ use crate::engine::config::EmulatorConfig;
 use crate::engine::instance::EmulatorInstance;
 
 use crate::frontend::panels::cpu_viewer::render_cpu_viewer;
+use crate::ppu::palettes::PaletteTheme;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tab {
@@ -11,12 +12,27 @@ pub enum Tab {
     PpuViewer,  
     MemoryEditor,
     ApuWaveform,
+    Settings,
 }
 
 pub struct NesTabViewer<'a> {
     pub nes_texture: Option<egui::TextureId>,
     pub emulator: Option<&'a EmulatorInstance>,
-    pub config: EmulatorConfig,
+    pub config: &'a mut EmulatorConfig,
+
+    pub pattern_viewer: &'a mut crate::frontend::panels::pattern_table_viewer::PatternTableViewer,
+}
+
+impl NesTabViewer<'_> {
+    pub fn change_palette(&mut self, ui: &mut egui_dock::egui::Ui) {
+        egui::ComboBox::from_label("Palette")
+        .selected_text(format!("{:?}", self.config.palette))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut self.config.palette, PaletteTheme::DefaultNtsc, "NTSC");
+            ui.selectable_value(&mut self.config.palette, PaletteTheme::Nestopia,    "Nestopia");
+            ui.selectable_value(&mut self.config.palette, PaletteTheme::Fceux,   "Composite");
+        });
+    }
 }
 
 impl TabViewer for NesTabViewer<'_> {
@@ -29,6 +45,7 @@ impl TabViewer for NesTabViewer<'_> {
             Tab::PpuViewer   => "PPU".into(),
             Tab::MemoryEditor => "Memory".into(),
             Tab::ApuWaveform => "APU".into(),
+            Tab::Settings => "Settings".into(),
         }
     }
     fn ui(&mut self, ui: &mut egui_dock::egui::Ui, tab: &mut Self::Tab) {
@@ -84,13 +101,20 @@ impl TabViewer for NesTabViewer<'_> {
                 
             }
             Tab::PpuViewer => {
-                // pattern tables etc
+                if let Some(emu) = self.emulator {
+                    self.pattern_viewer.render(ui, emu);
+                } else {
+                    ui.label("No loaded ROM");
+                }
             }
             Tab::MemoryEditor => {
                 // hex view
             }
             Tab::ApuWaveform => {
                 // waveform plot
+            }
+            Tab::Settings => {
+                self.change_palette(ui);
             }
         }
     }

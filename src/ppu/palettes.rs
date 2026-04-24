@@ -7,7 +7,7 @@ pub struct NESColor {
     pub b: u8,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default, PartialEq)]
 pub enum PaletteTheme {
     #[default]
     DefaultNtsc,

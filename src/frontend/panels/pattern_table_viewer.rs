@@ -20,9 +20,25 @@ impl PatternTableViewer {
 
         texture.set(image, TextureOptions::NEAREST);
 
-        let size = egui::vec2(256.0, 128.0);
-        let image = egui::Image::new(egui::load::SizedTexture::new(texture.id(), size));
-        ui.add(image);
+        ui.group(|ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(
+                    egui::RichText::new("Pattern Tables ($0000 and $1000)")
+                        .size(12.0)
+                        .strong()
+                );
+            });
+
+            ui.separator();
+
+            let scale = (ui.available_size().x / 256.0).min(ui.available_size().y / 128.0);
+            let size = egui::vec2(256.0 * scale, 128.0 * scale);
+
+            let image = egui::Image::new(egui::load::SizedTexture::new(texture.id(), size));
+            ui.add(image);
+        });
+
+
     }
 
     fn generate_pattern_image(&self, emu: &EmulatorInstance) -> ColorImage {
