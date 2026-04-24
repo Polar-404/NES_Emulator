@@ -1,5 +1,4 @@
 use sysinfo::{System, Pid};
-use macroquad::prelude::get_time;
 pub struct PerfomanceStats {
     sys: System,
     pid: Pid,
@@ -17,11 +16,11 @@ impl PerfomanceStats {
             cpu_usage: 0.0,
             main_emu_thread: 0.0,
             memory_usage_mb: 0.0,
-            last_update: get_time(),
+            last_update: 0.0,
         }
     }
     pub fn update_status(&mut self) {
-        let current_time = get_time();
+        let current_time = 0.0;
         if current_time - self.last_update >= 0.5 {
             self.sys.refresh_process(self.pid);
             if let Some(process) = self.sys.process(self.pid) {

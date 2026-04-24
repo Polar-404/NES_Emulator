@@ -1,6 +1,7 @@
 pub mod pause_menu;
 pub mod typing_path;
 pub mod cpu_viewer;
+pub mod open_rom;
 
 use crate::frontend::dock_state::Tab;
 
