@@ -1,7 +1,7 @@
 // The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
 // Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator. (except by the BUS, and NMI)
 
-use crate::cpu::opcodes;
+use crate::cpu::opcodes::{self, opcodes_map};
 use crate::memory::bus::BUS; 
 use crate::memory::mapper_base::*;
 
@@ -813,7 +813,7 @@ impl CPU {
 
     pub fn step_with_callback<F>(&mut self, mut callback: Option<F>) -> (bool, u8) 
     where F: FnMut(&mut CPU) {
-        let ref opcodes: HashMap<u8, &'static opcodes::OpCode> = *opcodes::OPCODES_MAP;
+        let ref opcodes: &'static HashMap<u8, &'static opcodes::OpCode> = opcodes_map();
 
         if let Some(ref mut c) = callback {
             c(self)
