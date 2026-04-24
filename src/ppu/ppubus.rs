@@ -18,6 +18,31 @@ impl PPUBUS {
         }
     }
 
+    pub fn peek(&self, addr: u16) -> u8 {
+        let addr =  addr & 0x3FFF;
+        match addr {
+            0x3F00..=0x3FFF => {
+                let mut palette_addr = (addr & 0x1F) as usize;
+
+                if palette_addr & 0x13 == 0x10 {
+                    palette_addr &= 0x0F;
+                }
+                
+                self.palette_ram[palette_addr]
+                
+            }
+            0..=0x1FFF => {
+                self.mapper.borrow().read_chr(addr)
+            }
+            0x2000..=0x3EFF  => {
+                self.read_vram(addr)
+            }
+            _ => {
+                todo!();
+            }
+        }     
+    }
+
     pub fn write_ppubus(&mut self, addr: u16, data: u8) {
         let addr =  addr & 0x3FFF;
         match addr {

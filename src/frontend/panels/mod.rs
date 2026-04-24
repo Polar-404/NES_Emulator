@@ -2,6 +2,7 @@ pub mod pause_menu;
 pub mod typing_path;
 pub mod cpu_viewer;
 pub mod open_rom;
+pub mod pattern_table_viewer;
 
 use crate::frontend::dock_state::Tab;
 
@@ -13,7 +14,7 @@ pub fn create_initial_dock_state() -> DockState<Tab> {
     let [main, right] = state.main_surface_mut().split_right(
         NodeIndex::root(), 
         0.7,
-        vec![Tab::CpuViewer, Tab::PpuViewer],
+        vec![Tab::CpuViewer, Tab::PpuViewer, Tab::Settings],
     );
     
     state.main_surface_mut().split_below(
