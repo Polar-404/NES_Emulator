@@ -137,6 +137,36 @@ impl PPU {
         }
     }
 
+    pub fn peek(&self, addr: u16) -> u8 {
+        match addr & 0x07 {
+            // PPUCTRL, PPUMASK, OAMADDR, PPUADDR: 
+            0x00 | 0x01 | 0x03 | 0x06 => self.data_buffer,
+
+            // PPUSTATUS (0x2002)
+            0x02 => {
+                (self.status.bits() & 0xE0) | (self.data_buffer & 0x1F)
+            }
+
+            // OAMDATA (0x2004)
+            0x04 => {
+                0
+                //self.oam_data[self.oam_addr as usize]
+            }
+
+            // PPUDATA (0x2007)
+            0x07 => {
+                let addr = self.v.addr & 0x3FFF;
+                if addr >= 0x3F00 {
+                    self.ppubus.peek(addr)
+                } else {
+                    self.data_buffer
+                }
+            }
+
+            _ => self.data_buffer,
+        }
+    }
+
     /// https://www.nesdev.org/wiki/PPU_registers#Summary
     pub fn read_registers(&mut self, addr: u8) -> u8 {
         match addr & 0x07 {

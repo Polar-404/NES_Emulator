@@ -3,6 +3,7 @@ pub mod typing_path;
 pub mod cpu_viewer;
 pub mod open_rom;
 pub mod pattern_table_viewer;
+pub mod memory_viewer;
 
 use crate::frontend::dock_state::Tab;
 

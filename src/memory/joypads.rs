@@ -23,6 +23,9 @@ impl JoyPad {
             joypad_buttons: JoyPadButtons::from_bits_truncate(0),
         }
     }
+    pub fn peek(&self) -> u8 {
+        self.joypad_buttons.bits()
+    }
     pub fn read(&mut self) -> u8 {
         if self.read_counter >= 8 {
             return 1
