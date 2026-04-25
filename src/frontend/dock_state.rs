@@ -2,7 +2,10 @@ use egui_dock::{TabViewer};
 use crate::engine::config::EmulatorConfig;
 use crate::engine::instance::EmulatorInstance;
 
-use crate::frontend::panels::cpu_viewer::render_cpu_viewer;
+use crate::frontend::panels::{
+    cpu_viewer::render_cpu_viewer,
+    memory_viewer::MemViewer,
+};
 use crate::ppu::palettes::PaletteTheme;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -108,7 +111,12 @@ impl TabViewer for NesTabViewer<'_> {
                 }
             }
             Tab::MemoryEditor => {
-                // hex view
+                if let Some(emu) = self.emulator {
+                    MemViewer::render_memory_viewer(ui, emu, 0x00, 0x07FF);
+                } else {
+                    ui.label("No loaded ROM");
+                }
+                
             }
             Tab::ApuWaveform => {
                 // waveform plot

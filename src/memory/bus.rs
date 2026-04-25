@@ -54,6 +54,37 @@ impl BUS {
             apu: APU::default(),
         }
     }
+
+    pub fn peek(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x1FFF => {
+                let addr = addr & 0x07FF;
+                self.cpu_memory[addr as usize]
+            }
+            0x2000..=0x3FFF => {
+                self.ppu.peek(addr)
+            }
+            0x4000..=0x4014 => {
+                0
+            }
+            0x4015 => self.apu.read_status(),
+            0x4016 => {
+                self.joypad_1.peek()
+            }
+            0x4017 => {
+                self.joypad_2.peek()
+            }
+            0x4018..=0x401F => {
+                let addr = addr - 0x4018;
+                self.apu_and_io_functionality[addr as usize]
+            }
+            0x4020..=0xFFFF => {
+                self.mapper.borrow().read(addr)
+                //self.unmapped[addr as usize]
+            }
+        }
+    }
+
     #[inline(always)]
     pub fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
