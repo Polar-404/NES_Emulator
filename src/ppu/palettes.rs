@@ -1,13 +1,15 @@
+use std::{fmt::Error, path::PathBuf};
+
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)] 
 pub struct NESColor {
     pub r: u8,
     pub g: u8,
     pub b: u8,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 pub enum PaletteTheme {
     #[default]
     DefaultNtsc,
@@ -16,6 +18,7 @@ pub enum PaletteTheme {
     InvertedNtsc,
     Nestopia,
     ShovelKnight,
+    Custom(String, Vec<NESColor>), 
 }
 impl PaletteTheme {
     /// Returns a reference to the current color theme.
@@ -31,21 +34,56 @@ impl PaletteTheme {
             Self::InvertedNtsc  => &NTSC_INVERTED_PALETTE,
             Self::Nestopia      => &NESTOPIA_PALETTE,
             Self::ShovelKnight  => &SHOVEL_KNIGHT_PALETTE,
+            Self::Custom(_, custom_colors) => custom_colors
+                .as_slice()
+                .try_into()
+                .expect("The palette must have exactly 64 colors")
         }
     }
-    /// changes self to the next of a fixed-order list
-    pub fn cycle_palettes(&mut self) {
-        let next = (*self as u8 + 1) % 6;
-        
-        *self = match next {
-            0 => Self::DefaultNtsc,
-            1 => Self::SonyCxa,
-            2 => Self::Fceux,
-            3 => Self::InvertedNtsc,
-            4 => Self::Nestopia,
-            5 => Self::ShovelKnight,
-            _ => Self::DefaultNtsc,
-        };
+    pub fn create_palette_from_dot_pal(path: &PathBuf) -> Result<[NESColor; 64], PaletteError> {
+        let bytes = std::fs::read(path)?;
+        if let Ok(text) = String::from_utf8(bytes.clone()) {
+            if text.starts_with("JASC-PAL") {
+                let mut new_colors = [NESColor { r: 0, g: 0, b: 0 }; 64];
+                let mut lines = text.lines().skip(3);
+                
+                for i in 0..64 {
+                    if let Some(line) = lines.next() {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() == 3 {
+                            if let (Ok(r), Ok(g), Ok(b)) = (parts[0].parse(), parts[1].parse(), parts[2].parse()) {
+                                new_colors[i] = NESColor { r, g, b };
+                            }
+                        }
+                    }
+                }
+                return Ok(new_colors);
+            }
+        }
+        if bytes.len() == 192 {
+            let mut new_colors = [ NESColor{ r: 0, g: 0, b: 0}; 64 ];
+            for i in 0..64 {
+                new_colors[i] = NESColor { 
+                    r: bytes[i * 3], 
+                    g: bytes[i * 3 + 2], 
+                    b: bytes[i * 3 + 2]
+                }
+            }
+            Ok(new_colors)
+        } else {
+            Err(PaletteError::InvalidFormat(format!("Invalid file size (Expected 192bytes, found: {})", bytes.len())))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum PaletteError {
+    Io(std::io::Error),
+    InvalidFormat(String),
+}
+impl From<std::io::Error> for PaletteError {
+    fn from(err: std::io::Error) -> Self {
+        PaletteError::Io(err)
     }
 }
 
