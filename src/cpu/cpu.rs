@@ -2,6 +2,7 @@
 // Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator. (except by the BUS, and NMI)
 
 use crate::cpu::opcodes::{self, opcodes_map};
+use crate::engine::console::{LogType, print_logs};
 use crate::memory::bus::BUS; 
 use crate::memory::mapper_base::*;
 
@@ -65,7 +66,8 @@ pub struct CPU {
     
     pub vblank: bool,
 
-    pub last_opcode: u8
+    pub last_opcode: u8,
+    is_halted: bool
 }
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
@@ -98,7 +100,8 @@ impl CPU {
             bus: BUS::new(mapper),
             vblank: false,
             cycles: 0,
-            last_opcode : 0
+            last_opcode : 0,
+            is_halted: false,
         }
     }
 
@@ -820,6 +823,9 @@ impl CPU {
         }
 
         if self.vblank {
+            print_logs(LogType::Debug, format!("Vblank Triggered [PC:{} | A:{} | X:{} | Y:{} CYC: {}]",
+                self.bus.peek(self.program_counter), self.register_a, self.register_x, self.register_y, self.cycles
+            ));
             self.trigger_cpu_nmi();
         }
 
@@ -832,7 +838,16 @@ impl CPU {
 
         let program_counter_state = self.program_counter;
 
-        let opcode = opcodes.get(&self.last_opcode).expect(&format!("OpCode {:x} não foi reconhecido no endereço {:04X}", self.last_opcode, self.program_counter - 1));
+        let opcode = match opcodes.get(&self.last_opcode) {
+            Some(op) => op,
+            None => {
+                print_logs(LogType::Warning, format!("Ilegal Opcode {:02X}, at PC:{:04X}, CPU is halted",
+                    self.last_opcode, self.program_counter - 1
+                ));
+                self.is_halted = true;
+                return (true, 0);
+            }
+        };
         
         let mut opcycles = opcode.cycles;
 
@@ -1029,7 +1044,7 @@ impl CPU {
             //BRK
             0x00 => self.brk(),
 
-            _ => todo!("code: {}", self.last_opcode)
+            _ => print_logs(LogType::Warning, format!("code: {}", self.last_opcode))
         }
 
         self.cycles += opcycles as u64;
@@ -1044,7 +1059,7 @@ impl CPU {
         if program_counter_state == self.program_counter {
             self.program_counter += (opcode.len -1) as u16;
         }
-        (true, opcycles)
+        (false, opcycles)
     }
 
     pub fn format_cpu_status(status: u8) -> String {

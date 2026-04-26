@@ -4,20 +4,25 @@ use egui_glow::EguiGlow;
 use glow::HasContext;
 
 use image::open;
+use ringbuf::Cons;
 use winit::{
-    application::ApplicationHandler, event::{ElementState, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
+    application::ApplicationHandler, 
+    event::{ElementState, WindowEvent}, 
+    event_loop::ActiveEventLoop, 
+    keyboard::{KeyCode, PhysicalKey}, 
+    window::{Window, WindowId}
 };
 
 use crate::{
     apu::audio::AudioOutput, 
     engine::{
-        config::EmulatorConfig, input::*, instance::EmulatorInstance
+        config::EmulatorConfig, console::*, input::*, instance::EmulatorInstance
     }, 
     frontend::{
         dock_state::{NesTabViewer, Tab}, 
         glstate::GLState, 
         nes_texture::NesTexture, 
-        panels::{create_initial_dock_state, pattern_table_viewer::PatternTableViewer}
+        panels::{app_terminal::ConsoleViewer, create_initial_dock_state, pattern_table_viewer::PatternTableViewer}
     }
 };
 
@@ -38,6 +43,7 @@ pub struct App {
 
     config: EmulatorConfig,
     instant: Instant,
+    console: ConsoleViewer
 }
 impl App {
     pub fn new() -> Self {
@@ -61,6 +67,7 @@ impl App {
 
             config: EmulatorConfig::load(),
             instant: Instant::now(),
+            console: ConsoleViewer::new(),
         }
     }
 }
@@ -210,6 +217,7 @@ impl ApplicationHandler for App {
                         emulator: nes_ref,
                         config: &mut self.config,
                         pattern_viewer: &mut PatternTableViewer::new(),
+                        terminal: &mut self.console,
                     });
                 });
 
@@ -221,7 +229,7 @@ impl ApplicationHandler for App {
                                 self.nes = Some(emu);
                             }
                             Err(e) => {
-                                eprintln!("Failed to load ROM: {}", e);
+                                print_logs(LogType::Warning, format!("Failed to load ROM: {}", e));
                             }
                         }
                     }
@@ -230,6 +238,7 @@ impl ApplicationHandler for App {
                 if pause_requested {
                     if let Some(emu) = &mut self.nes {
                         emu.is_paused = !emu.is_paused;
+                        
                     }
                 }
 

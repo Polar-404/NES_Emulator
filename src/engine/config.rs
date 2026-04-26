@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Serialize, Deserialize};
-use crate::ppu::palettes::*;
+use crate::{engine::console::{LogType, print_logs}, ppu::palettes::*};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(default)]
@@ -36,6 +36,7 @@ impl EmulatorConfig {
             let config_path = Self::get_config_path();
             let _ = std::fs::write(config_path, content);
         }
+        print_logs(LogType::Info,format!("Saved Settings."));
     }
 }
 

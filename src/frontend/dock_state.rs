@@ -2,6 +2,7 @@ use egui_dock::{TabViewer};
 use crate::engine::config::EmulatorConfig;
 use crate::engine::instance::EmulatorInstance;
 
+use crate::frontend::panels::app_terminal::ConsoleViewer;
 use crate::frontend::panels::settings_panel::render_settings;
 use crate::frontend::panels::{
     cpu_viewer::render_cpu_viewer,
@@ -16,6 +17,7 @@ pub enum Tab {
     MemoryEditor,
     ApuWaveform,
     Settings,
+    Terminal,
 }
 
 pub struct NesTabViewer<'a> {
@@ -24,6 +26,7 @@ pub struct NesTabViewer<'a> {
     pub config: &'a mut EmulatorConfig,
 
     pub pattern_viewer: &'a mut crate::frontend::panels::pattern_table_viewer::PatternTableViewer,
+    pub terminal: &'a mut ConsoleViewer,
 }
 
 impl TabViewer for NesTabViewer<'_> {
@@ -37,6 +40,7 @@ impl TabViewer for NesTabViewer<'_> {
             Tab::MemoryEditor => "Memory".into(),
             Tab::ApuWaveform => "APU".into(),
             Tab::Settings => "Settings".into(),
+            Tab::Terminal => "Terminal".into(),
         }
     }
     fn ui(&mut self, ui: &mut egui_dock::egui::Ui, tab: &mut Self::Tab) {
@@ -111,6 +115,9 @@ impl TabViewer for NesTabViewer<'_> {
             }
             Tab::Settings => {
                 render_settings(self.config, ui);
+            }
+            Tab::Terminal => {
+                self.terminal.render_terminal(ui);
             }
         }
     }

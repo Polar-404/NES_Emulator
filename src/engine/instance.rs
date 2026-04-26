@@ -12,6 +12,7 @@ use crate::{
 pub struct EmulatorInstance {
     pub cpu: CPU,
     pub is_paused: bool,
+    pub is_halted: bool,
     stats: PerfomanceStats,
 }
 
@@ -24,6 +25,7 @@ impl EmulatorInstance {
         Ok(Self {
             cpu,
             is_paused: false,
+            is_halted: false,
             stats: PerfomanceStats::new(),
         })
     }
@@ -32,13 +34,19 @@ impl EmulatorInstance {
         self.cpu.bus.ppu.frame_complete = false;
 
         if self.is_paused { return; }
+        if self.is_halted { return; }
 
         while !self.cpu.bus.ppu.frame_complete {
             #[cfg(feature = "debug_log")]
             let (_, cycles) = self.cpu.step_with_callback(Some(|cpu: &mut CPU| logger(cpu)));
 
             #[cfg(not(feature = "debug_log"))]
-            let (_, cycles) = self.cpu.step();
+            let (halted, cycles) = self.cpu.step();
+            
+            if halted { 
+                self.is_halted = true; 
+                break;
+            };
 
             if let Some(audio) = audio {
                 self.cpu.bus.sync_audio(cycles, audio);
