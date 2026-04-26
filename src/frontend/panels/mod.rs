@@ -5,6 +5,7 @@ pub mod open_rom;
 pub mod pattern_table_viewer;
 pub mod memory_viewer;
 pub mod settings_panel;
+pub mod app_terminal;
 
 use crate::frontend::dock_state::Tab;
 
@@ -22,7 +23,7 @@ pub fn create_initial_dock_state() -> DockState<Tab> {
     state.main_surface_mut().split_below(
         right,
         0.5,
-        vec![Tab::MemoryEditor],
+        vec![Tab::MemoryEditor, Tab::Terminal],
     );
     
     state

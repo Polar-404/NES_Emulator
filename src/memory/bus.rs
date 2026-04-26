@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::engine::console::{self, LogType};
+use crate::memory::mappers::InesMapper163;
 use crate::memory::{mappers, mapper_base::*};
 
 use crate::{
@@ -288,17 +290,17 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
 
     let has_trainer = (rom_data[6] & 0b0000_0100) != 0;
 
-    //TODO
-    println!("--- ROM HEADER INFO ---");
-    println!("Byte 4 (PRG Banks): {}", rom_data[4]);
-    println!("Byte 5 (CHR Banks): {}", rom_data[5]);
-    println!("Byte 6 (Flags 6)  : {:08b}", rom_data[6]);
-    println!("Byte 7 (Flags 7)  : {:08b}", rom_data[7]);
-    println!("Mapper ID -> {}", mapper_match);
-    println!("Has Trainer -> {}", has_trainer);
-
-    let program_size = rom_data[4] as usize * 0x4000; // the size of the PRG ROM may be 16kb or 32kb, 
+    console::print_logs(LogType::Info, format!("--- ROM HEADER INFO ---"));
+    console::print_logs(LogType::Info, format!("Byte 4 (PRG Banks): {}", rom_data[4]));
+    console::print_logs(LogType::Info, format!("Byte 5 (CHR Banks): {}", rom_data[5]));
+    console::print_logs(LogType::Info, format!("Byte 6 (Flags 6)  : {:08b}", rom_data[6]));
+    console::print_logs(LogType::Info, format!("Byte 7 (Flags 7)  : {:08b}", rom_data[7]));
+    console::print_logs(LogType::Info, format!("Mapper ID -> {}", mapper_match));
+    console::print_logs(LogType::Info, format!("Has Trainer -> {}", has_trainer));
+    
+    // the size of the PRG ROM may be 16kb or 32kb, 
     //that info is at byte 4 as [1 if 16kb and 2 if 32kb]
+    let program_size = rom_data[4] as usize * 0x4000; 
 
     let chr_size = rom_data[5] as usize * 0x2000; // then I take the chr size, which is at byte 5
 
@@ -324,9 +326,10 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
     }
 
     match mapper_match {
-        0 => Ok(wrap_in_pointers(mappers::InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
-        1 => Ok(wrap_in_pointers(mappers::InesMapper001::new(prg_rom_data, chr_rom_data, GameSave::new(path)))),
-        4 => Ok(wrap_in_pointers(mappers::InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
+        0 =>    Ok(wrap_in_pointers(mappers::InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
+        1 =>    Ok(wrap_in_pointers(mappers::InesMapper001::new(prg_rom_data, chr_rom_data, GameSave::new(path)))),
+        4 =>    Ok(wrap_in_pointers(mappers::InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
+        163 =>  Ok(wrap_in_pointers(InesMapper163::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
 
         _ => Err(format!("Mapper {} is not supported yet", mapper_match).into())
     }
