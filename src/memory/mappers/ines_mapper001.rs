@@ -53,7 +53,7 @@ impl InesMapper001 {
             //16KB: (fix the FIRST bank at $8000 and changes bank at $C000)
             2 => {
                 if addr >= 0x8000 && addr < 0xC000 {
-                    (addr - 8000) as usize % prg_size
+                    (addr - 0x8000) as usize % prg_size
                 } else {
                     ((bank as usize * 0x4000) + (addr - 0xC000) as usize) % prg_size
                 }
