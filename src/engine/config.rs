@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use crate::ppu::palettes::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
 pub struct EmulatorConfig {
     pub volume: f32,
     pub hide_overscan: bool,
@@ -14,10 +15,14 @@ pub struct EmulatorConfig {
 }
 impl EmulatorConfig {
     pub fn load() -> Self {
-        std::fs::read_to_string("config.json")
-            .ok()
-            .and_then(|content| serde_json::from_str(&content).ok())
-            .unwrap_or_default()
+        let path = Self::get_config_path();
+        match std::fs::read_to_string(&path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
+                eprintln!("[WARNING] Structural failiure at the config.json file, ({}). Will re-write using default configs", e);
+                Self::default()
+            }),
+            Err(_) => Self::default(),
+        }
     }
     fn get_config_path() -> PathBuf {
         let mut config_path = PathBuf::new();

@@ -3,6 +3,7 @@ use egui_dock::{DockArea, DockState, Style};
 use egui_glow::EguiGlow;
 use glow::HasContext;
 
+use image::open;
 use winit::{
     application::ApplicationHandler, event::{ElementState, WindowEvent}, event_loop::ActiveEventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowId}
 };
@@ -20,7 +21,7 @@ use crate::{
     }
 };
 
-use std::{sync::Arc, time::{Duration, Instant}};
+use std::{path::PathBuf, sync::Arc, time::{Duration, Instant}};
 
 pub struct App {
     window: Option<Arc<Window>>,
@@ -30,6 +31,7 @@ pub struct App {
 
     nes: Option<EmulatorInstance>,
     nes_texture: Option<NesTexture>,
+    rom_path: Option<PathBuf>,
 
     audio: Option<(AudioOutput, u32)>,
     input_state: ControllerState,
@@ -47,6 +49,7 @@ impl App {
 
             nes: None,
             nes_texture: None,
+            rom_path: None,
 
             audio: AudioOutput::new(44100),
             input_state: ControllerState {
@@ -165,7 +168,9 @@ impl ApplicationHandler for App {
                     texture.update(gl, emu.frame_buffer());
                 }
 
-                let mut open_rom_requested = false;   
+                let mut open_rom_requested = false;
+                let mut pause_requested = false; 
+                let mut reset_requested = false;
                 let dock = &mut self.dock_state;
                 let nes_ref = self.nes.as_ref();
 
@@ -179,11 +184,17 @@ impl ApplicationHandler for App {
                                     open_rom_requested = true;
                                     ui.close_menu();
                                 }
-                                if ui.button("Exit").clicked() { std::process::exit(0); }
+                                if ui.button("Exit").clicked() { event_loop.exit(); }
                             });
                             ui.menu_button("NES", |ui| {
-                                if ui.button("Reset").clicked() { /* reset */ }
-                                if ui.button("Pause").clicked() { /* pause */ }
+                                if ui.button("Reset").clicked() {
+                                    reset_requested = true;
+                                    ui.close_menu();
+                                 }
+                                if ui.button("Pause").clicked() { 
+                                    pause_requested = true; 
+                                    ui.close_menu();
+                                }
                             });
                             ui.menu_button("Debug", |ui| {
                                 if ui.button("CPU Viewer").clicked() { /* toggle */ }
@@ -204,12 +215,32 @@ impl ApplicationHandler for App {
 
                 if open_rom_requested {
                     if let Some(path) = crate::frontend::panels::open_rom::open_rom_dialog() {
-                        match crate::engine::instance::EmulatorInstance::new(path) {
+                        match crate::engine::instance::EmulatorInstance::new(path.clone()) {
+                            Ok(emu) => {
+                                self.rom_path = Some(path);
+                                self.nes = Some(emu);
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to load ROM: {}", e);
+                            }
+                        }
+                    }
+                }
+
+                if pause_requested {
+                    if let Some(emu) = &mut self.nes {
+                        emu.is_paused = !emu.is_paused;
+                    }
+                }
+
+                if reset_requested {
+                    if let Some(_) = &mut self.nes {
+                        match crate::engine::instance::EmulatorInstance::new(self.rom_path.clone().unwrap()) {
                             Ok(emu) => {
                                 self.nes = Some(emu);
                             }
                             Err(e) => {
-                                eprintln!("Falha ao carregar a ROM: {}", e);
+                                eprintln!("Failed to load ROM: {}", e);
                             }
                         }
                     }
