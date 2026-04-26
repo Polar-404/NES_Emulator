@@ -379,7 +379,7 @@ impl CPU {
         let modification = self.register_a & data;
 
         self.status.set(CpuFlags::ZERO, modification == 0);
-        self.status.set(CpuFlags::NEGATIVE, data & 0b0010_0000 != 0);
+        self.status.set(CpuFlags::NEGATIVE, data & 0b1000_0000 != 0);
         self.status.set(CpuFlags::OVERFLOW, data & 0b0100_0000 != 0);
 
         0
