@@ -56,7 +56,7 @@ impl App {
                 start: false, select: false,
             },
 
-            config: EmulatorConfig::default(),
+            config: EmulatorConfig::load(),
             instant: Instant::now(),
         }
     }
@@ -153,8 +153,11 @@ impl ApplicationHandler for App {
                 }
 
                 if let Some(emu) = &mut self.nes {
-                    emu.cpu.bus.ppu.color_palette = self.config.palette;
-                    // Aplica os inputs capturados no começo da função
+
+                    //TODO: probably optimize this
+                    emu.cpu.bus.ppu.color_palette = self.config.palette.clone();
+                    emu.cpu.bus.apu.volume = self.config.volume / 100.0;
+
                     apply_input(&mut emu.cpu.bus.joypad_1, &self.input_state, &self.config);
 
                     emu.run_frame(&mut self.audio);
@@ -217,6 +220,7 @@ impl ApplicationHandler for App {
                 window.request_redraw();
             }
             WindowEvent::CloseRequested => {
+                self.config.save();
                 event_loop.exit();
             }
             _ => { }

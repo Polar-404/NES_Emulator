@@ -2,11 +2,11 @@ use egui_dock::{TabViewer};
 use crate::engine::config::EmulatorConfig;
 use crate::engine::instance::EmulatorInstance;
 
+use crate::frontend::panels::settings_panel::render_settings;
 use crate::frontend::panels::{
     cpu_viewer::render_cpu_viewer,
     memory_viewer::MemViewer,
 };
-use crate::ppu::palettes::PaletteTheme;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tab {
@@ -24,18 +24,6 @@ pub struct NesTabViewer<'a> {
     pub config: &'a mut EmulatorConfig,
 
     pub pattern_viewer: &'a mut crate::frontend::panels::pattern_table_viewer::PatternTableViewer,
-}
-
-impl NesTabViewer<'_> {
-    pub fn change_palette(&mut self, ui: &mut egui_dock::egui::Ui) {
-        egui::ComboBox::from_label("Palette")
-        .selected_text(format!("{:?}", self.config.palette))
-        .show_ui(ui, |ui| {
-            ui.selectable_value(&mut self.config.palette, PaletteTheme::DefaultNtsc, "NTSC");
-            ui.selectable_value(&mut self.config.palette, PaletteTheme::Nestopia,    "Nestopia");
-            ui.selectable_value(&mut self.config.palette, PaletteTheme::Fceux,   "Composite");
-        });
-    }
 }
 
 impl TabViewer for NesTabViewer<'_> {
@@ -122,7 +110,7 @@ impl TabViewer for NesTabViewer<'_> {
                 // waveform plot
             }
             Tab::Settings => {
-                self.change_palette(ui);
+                render_settings(self.config, ui);
             }
         }
     }
