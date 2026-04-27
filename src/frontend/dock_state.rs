@@ -7,6 +7,7 @@ use crate::frontend::panels::settings_panel::render_settings;
 use crate::frontend::panels::{
     cpu_viewer::render_cpu_viewer,
     memory_viewer::MemViewer,
+    ppu_viewer::*,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,7 +26,8 @@ pub struct NesTabViewer<'a> {
     pub emulator: Option<&'a EmulatorInstance>,
     pub config: &'a mut EmulatorConfig,
 
-    pub pattern_viewer: &'a mut crate::frontend::panels::pattern_table_viewer::PatternTableViewer,
+    pub pattern_viewer: &'a mut pattern_viewer::PatternTableViewer,
+    pub nametable_viewer: &'a mut palette_viewer::PaletteViewer,
     pub terminal: &'a mut ConsoleViewer,
 }
 
@@ -98,6 +100,7 @@ impl TabViewer for NesTabViewer<'_> {
             Tab::PpuViewer => {
                 if let Some(emu) = self.emulator {
                     self.pattern_viewer.render(ui, emu);
+                    self.nametable_viewer.render(ui, emu);
                 } else {
                     ui.label("No loaded ROM");
                 }
