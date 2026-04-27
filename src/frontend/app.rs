@@ -22,7 +22,10 @@ use crate::{
         dock_state::{NesTabViewer, Tab}, 
         glstate::GLState, 
         nes_texture::NesTexture, 
-        panels::{app_terminal::ConsoleViewer, create_initial_dock_state, pattern_table_viewer::PatternTableViewer}
+        panels::{app_terminal::ConsoleViewer, 
+            create_initial_dock_state, 
+            ppu_viewer::*
+        }
     }
 };
 
@@ -216,7 +219,8 @@ impl ApplicationHandler for App {
                         nes_texture: texture_opt,
                         emulator: nes_ref,
                         config: &mut self.config,
-                        pattern_viewer: &mut PatternTableViewer::new(),
+                        pattern_viewer: &mut pattern_viewer::PatternTableViewer::new(),
+                        nametable_viewer: &mut palette_viewer::PaletteViewer::new(),
                         terminal: &mut self.console,
                     });
                 });

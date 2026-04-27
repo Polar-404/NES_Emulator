@@ -31,8 +31,8 @@ impl PatternTableViewer {
 
             ui.separator();
 
-            let scale = (ui.available_size().x / 256.0).min(ui.available_size().y / 128.0);
-            let size = egui::vec2(256.0 * scale, 128.0 * scale);
+            let width = ui.available_width();
+            let size = egui::vec2(width, width / 2.0); 
 
             let image = egui::Image::new(egui::load::SizedTexture::new(texture.id(), size));
             ui.add(image);

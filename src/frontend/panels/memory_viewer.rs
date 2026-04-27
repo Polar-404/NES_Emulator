@@ -26,16 +26,16 @@ impl MemViewer {
 
             ui.separator();
 
-            egui::ScrollArea::vertical().show_rows(ui, 14.0, ((end_addr - start_addr) / 16) as usize, |ui, row_range| {
+            egui::ScrollArea::vertical().show_rows(ui, 16.0, ((end_addr - start_addr) / 16) as usize, |ui, row_range| {
                 for row in row_range {
                     let addr = start_addr + (row as u16 * 16);
-                    ui.horizontal(|ui| {
-                        ui.label(format!("{:04X}:", addr));
-                        for i in 0..16 {
-                            let val = emu.cpu.bus.peek(addr + i);
-                            ui.label(format!("{:02X}", val));
-                        }
-                    });
+                    let mut row_text = format!("{:04X}:", addr);
+                    
+                    for i in 0..16 {
+                        let val = emu.cpu.bus.peek(addr + i);
+                        row_text.push_str(&format!(" {:02X}", val));
+                    }
+                    ui.label(egui::RichText::new(row_text).monospace());
                 }
             });
         });
