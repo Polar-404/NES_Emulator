@@ -1,10 +1,7 @@
-use egui::TextureId;
 use egui_dock::{DockArea, DockState, Style};
 use egui_glow::EguiGlow;
 use glow::HasContext;
 
-use image::open;
-use ringbuf::Cons;
 use winit::{
     application::ApplicationHandler, 
     event::{ElementState, WindowEvent}, 
@@ -77,10 +74,22 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let icon_bytes = include_bytes!("../../assets/icon.ico");
+
+        let image_data = image::load_from_memory(icon_bytes)
+            .expect("Failed to load icon")
+            .into_rgba8();
+
+        let (width, height) = image_data.dimensions();
+
+        let icon = winit::window::Icon::from_rgba(image_data.into_raw(), width, height)
+            .expect("Failed to create winit icon");
+
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
                 .with_title("NES Emulator")
+                .with_window_icon(Some(icon))
                 .with_inner_size(
                     winit::dpi::LogicalSize::new(1280, 720)
                 )
@@ -206,9 +215,49 @@ impl ApplicationHandler for App {
                                     ui.close_menu();
                                 }
                             });
-                            ui.menu_button("Debug", |ui| {
-                                if ui.button("CPU Viewer").clicked() { /* toggle */ }
-                                if ui.button("PPU Viewer").clicked() { /* toggle */ }
+                            ui.menu_button("View", |ui| {
+                                if ui.button("NES Screen").clicked() {
+                                    if let Some(nes_game_viewer) = dock.find_tab(&Tab::Emulator) {
+                                        dock.remove_tab(nes_game_viewer);
+                                    } else {
+                                        dock.main_surface_mut().push_to_first_leaf(Tab::Emulator);
+                                    }
+                                }
+                                if ui.button("Settings").clicked() {
+                                    if let Some(settings) = dock.find_tab(&Tab::Settings) {
+                                        dock.remove_tab(settings);
+                                    } else {
+                                        dock.main_surface_mut().push_to_first_leaf(Tab::Settings);
+                                    }
+                                }
+                                if ui.button("Terminal").clicked() {
+                                    if let Some(terminal) = dock.find_tab(&Tab::Terminal) {
+                                        dock.remove_tab(terminal);
+                                    } else {
+                                        dock.main_surface_mut().push_to_first_leaf(Tab::Terminal);
+                                    }
+                                }
+                                if ui.button("CPU Viewer").clicked() {
+                                    if let Some(cpu_viewer) = dock.find_tab(&Tab::CpuViewer) {
+                                        dock.remove_tab(cpu_viewer);
+                                    } else {
+                                        dock.main_surface_mut().push_to_first_leaf(Tab::CpuViewer);
+                                    }
+                                }
+                                if ui.button("PPU Viewer").clicked() {
+                                    if let Some(ppu_viewer) = dock.find_tab(&Tab::PpuViewer) {
+                                        dock.remove_tab(ppu_viewer);
+                                    } else {
+                                        dock.main_surface_mut().push_to_first_leaf(Tab::PpuViewer);
+                                    }
+                                }
+                                if ui.button("Memory Viewer").clicked() {
+                                    if let Some(memory_viewer) = dock.find_tab(&Tab::MemoryEditor) {
+                                        dock.remove_tab(memory_viewer);
+                                    } else {
+                                        dock.main_surface_mut().push_to_first_leaf(Tab::MemoryEditor);
+                                    }
+                                }
                             });
                         });
                     });
