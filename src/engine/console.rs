@@ -19,7 +19,7 @@ pub fn print_logs(log_type: LogType, log_msg: impl Into<String>) {
             log_type, 
             log_msg: log_msg.into()
         });
-        if logs.len() > 500 {
+        if logs.len() > 1500 {
             logs.remove(0);
         }
     }

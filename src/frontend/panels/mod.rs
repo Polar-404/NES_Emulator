@@ -15,16 +15,28 @@ use egui_dock::{DockState, NodeIndex};
 pub fn create_initial_dock_state() -> DockState<Tab> {
     let mut state = DockState::new(vec![Tab::Emulator]);
     
-    let [main, right] = state.main_surface_mut().split_right(
+    let [_main, right] = state.main_surface_mut().split_right(
         NodeIndex::root(), 
-        0.7,
-        vec![Tab::CpuViewer, Tab::PpuViewer, Tab::Settings],
+        0.55,
+        vec![Tab::PpuViewer, Tab::CpuViewer],
     );
     
-    state.main_surface_mut().split_below(
+    let [_main2, down2] = state.main_surface_mut().split_below(
         right,
+        0.6,
+        vec![Tab::MemoryEditor],
+    );
+
+    let [_main3, down3] = state.main_surface_mut().split_right(
+        down2,
         0.5,
-        vec![Tab::MemoryEditor, Tab::Terminal],
+        vec![Tab::Terminal],
+    );
+
+    let [_main2, _right4] = state.main_surface_mut().split_below(
+        down3,
+        0.5,
+        vec![Tab::Settings],
     );
     
     state
