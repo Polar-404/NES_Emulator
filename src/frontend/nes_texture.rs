@@ -18,7 +18,7 @@ impl NesTexture {
             gl.bind_texture(glow::TEXTURE_2D, Some(tex));
             
             gl.tex_image_2d(
-                glow::TEXTURE_2D, 0, glow::RGBA as i32, 256, 240, 0,
+                glow::TEXTURE_2D, 0, glow::SRGB8_ALPHA8 as i32, 256, 240, 0,
                 glow::RGBA, glow::UNSIGNED_BYTE,
                 glow::PixelUnpackData::Slice(Some(&vec![0u8; 256 * 240 * 4])),
             );
