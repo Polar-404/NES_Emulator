@@ -1,6 +1,8 @@
-use std::{fmt::Error, path::PathBuf};
+use std::{fmt::{Display, Error}, path::PathBuf};
 
 use serde::{Serialize, Deserialize};
+
+use crate::engine::console::{LogType, print_logs};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)] 
 pub struct NESColor {
@@ -29,11 +31,11 @@ impl PaletteTheme {
     pub fn get_collors(&self) -> &[NESColor; 64] {
         match self {
             Self::DefaultNtsc   => &NTSC_DEFAULT_PALETTE,
+            Self::Nestopia      => &NESTOPIA_PALETTE,
             Self::SonyCxa       => &SONY_CXA_PALETTE,
             Self::Fceux         => &FCEUX_PALETTE,
             Self::InvertedNtsc  => &NTSC_INVERTED_PALETTE,
-            Self::Nestopia      => &NESTOPIA_PALETTE,
-            Self::ShovelKnight  => &SHOVEL_KNIGHT_PALETTE,
+            Self::ShovelKnight  => &SHOVEL_KNIGHT_NES_PALETTE,
             Self::Custom(_, custom_colors) => custom_colors
                 .as_slice()
                 .try_into()
@@ -45,8 +47,24 @@ impl PaletteTheme {
         if let Ok(text) = String::from_utf8(bytes.clone()) {
             if text.starts_with("JASC-PAL") {
                 let mut new_colors = [NESColor { r: 0, g: 0, b: 0 }; 64];
-                let mut lines = text.lines().skip(3);
+                let mut lines = text.lines();
+
+                //see the number of colors, if different than 64 
+                //it warns the user that the palette may not be for the nes 
+                //since it doenst have all the colors
+                let n_of_colors = lines.nth(2).unwrap_or("0").parse::<u32>().unwrap_or(0);
+                if n_of_colors != 64 {
+                    print_logs(LogType::Warning, 
+                    format!(
+                        "The given palette has {} colors. \
+                        64 colors are expected for the NES. \
+                        Make sure this is intended to be used as a NES palette", 
+                        n_of_colors
+                    ));
+                }
+                let mut lines = lines.skip(3);
                 
+                // back to the palette formating
                 for i in 0..64 {
                     if let Some(line) = lines.next() {
                         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -65,7 +83,7 @@ impl PaletteTheme {
             for i in 0..64 {
                 new_colors[i] = NESColor { 
                     r: bytes[i * 3], 
-                    g: bytes[i * 3 + 2], 
+                    g: bytes[i * 3 + 1], 
                     b: bytes[i * 3 + 2]
                 }
             }
@@ -86,8 +104,17 @@ impl From<std::io::Error> for PaletteError {
         PaletteError::Io(err)
     }
 }
+impl Display for PaletteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PaletteError::Io(err) => write!(f, "IO Error: {}", err),
+            PaletteError::InvalidFormat(msg) => write!(f, "Invalid Format: {}", msg),
+        }
+    }
+}
 
-//NES PALETTE:
+// --------------HARDCODED PALETTES--------------
+
 pub const NTSC_DEFAULT_PALETTE: [NESColor; 64] = [
     NESColor { r: 84, g: 84, b: 84 },     NESColor { r: 0, g: 30, b: 116 },      NESColor { r: 8, g: 16, b: 144 },       NESColor { r: 48, g: 0, b: 136 },
     NESColor { r: 68, g: 0, b: 100 },     NESColor { r: 88, g: 0, b: 40 },       NESColor { r: 84, g: 4, b: 0 },         NESColor { r: 68, g: 24, b: 0 },
@@ -145,7 +172,6 @@ pub const FCEUX_PALETTE: [NESColor; 64] = [
     NESColor { r: 159, g: 255, b: 243 },  NESColor { r: 0, g: 0, b: 0 },         NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
 ];
 
-//NES INVERT PALETTE:
 pub const NTSC_INVERTED_PALETTE: [NESColor; 64] = [
     NESColor { r: 171, g: 171, b: 171 }, NESColor { r: 255, g: 225, b: 139 },    NESColor { r: 247, g: 239, b: 111 },    NESColor { r: 207, g: 255, b: 119 },
     NESColor { r: 187, g: 255, b: 155 }, NESColor { r: 167, g: 255, b: 215 },    NESColor { r: 171, g: 251, b: 255 },    NESColor { r: 187, g: 231, b: 255 },
@@ -184,8 +210,7 @@ pub const NESTOPIA_PALETTE: [NESColor; 64] = [
     NESColor { r: 180, g: 244, b: 240 }, NESColor { r: 212, g: 212, b: 212 },    NESColor { r: 0, g: 0, b: 0 },          NESColor { r: 0, g: 0, b: 0 },
 ];
 
-pub const SHOVEL_KNIGHT_PALETTE: [NESColor; 64] = [
-    // 0x00 - 0x0F
+pub const SHOVEL_KNIGHT_NES_PALETTE: [NESColor; 64] = [
     NESColor { r: 0x2c, g: 0x2c, b: 0x2c }, NESColor { r: 0x00, g: 0x00, b: 0xc4 }, NESColor { r: 0x40, g: 0x28, b: 0xc4 }, NESColor { r: 0x94, g: 0x00, b: 0x8c },
     NESColor { r: 0xac, g: 0x00, b: 0x28 }, NESColor { r: 0xac, g: 0x10, b: 0x00 }, NESColor { r: 0x8c, g: 0x18, b: 0x00 }, NESColor { r: 0x50, g: 0x30, b: 0x00 },
     NESColor { r: 0x00, g: 72, b: 0x00 },   NESColor { r: 0x00, g: 104, b: 0x00 },  NESColor { r: 0x00, g: 88, b: 0x00 },   NESColor { r: 0x00, g: 64, b: 88 },

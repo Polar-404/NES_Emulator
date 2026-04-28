@@ -12,6 +12,7 @@ use crate::frontend::dock_state::Tab;
 
 use egui_dock::{DockState, NodeIndex};
 
+/// Formated for 16:9 maximized window
 pub fn create_initial_dock_state() -> DockState<Tab> {
     let mut state = DockState::new(vec![Tab::Emulator]);
     
@@ -23,7 +24,7 @@ pub fn create_initial_dock_state() -> DockState<Tab> {
     
     let [_main2, down2] = state.main_surface_mut().split_below(
         right,
-        0.6,
+        0.635,
         vec![Tab::MemoryEditor],
     );
 

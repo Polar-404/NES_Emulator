@@ -2,7 +2,7 @@ use egui_dock::{TabViewer};
 use crate::engine::config::EmulatorConfig;
 use crate::engine::instance::EmulatorInstance;
 
-use crate::frontend::panels::app_terminal::ConsoleViewer;
+use crate::frontend::panels::app_terminal::render_terminal;
 use crate::frontend::panels::settings_panel::render_settings;
 use crate::frontend::panels::{
     cpu_viewer::render_cpu_viewer,
@@ -28,7 +28,6 @@ pub struct NesTabViewer<'a> {
 
     pub pattern_viewer: &'a mut pattern_viewer::PatternTableViewer,
     pub nametable_viewer: &'a mut palette_viewer::PaletteViewer,
-    pub terminal: &'a mut ConsoleViewer,
 }
 
 impl TabViewer for NesTabViewer<'_> {
@@ -120,7 +119,7 @@ impl TabViewer for NesTabViewer<'_> {
                 render_settings(self.config, ui);
             }
             Tab::Terminal => {
-                self.terminal.render_terminal(ui);
+                render_terminal(self.config, ui);
             }
         }
     }

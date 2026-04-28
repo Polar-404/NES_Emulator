@@ -19,7 +19,8 @@ use crate::{
         dock_state::{NesTabViewer, Tab}, 
         glstate::GLState, 
         nes_texture::NesTexture, 
-        panels::{app_terminal::ConsoleViewer, 
+        panels::{
+            app_terminal::*, 
             create_initial_dock_state, 
             ppu_viewer::*
         }
@@ -43,7 +44,6 @@ pub struct App {
 
     config: EmulatorConfig,
     instant: Instant,
-    console: ConsoleViewer
 }
 impl App {
     pub fn new() -> Self {
@@ -67,7 +67,6 @@ impl App {
 
             config: EmulatorConfig::load(),
             instant: Instant::now(),
-            console: ConsoleViewer::new(),
         }
     }
 }
@@ -270,7 +269,6 @@ impl ApplicationHandler for App {
                         config: &mut self.config,
                         pattern_viewer: &mut pattern_viewer::PatternTableViewer::new(),
                         nametable_viewer: &mut palette_viewer::PaletteViewer::new(),
-                        terminal: &mut self.console,
                     });
                 });
 
