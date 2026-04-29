@@ -25,9 +25,9 @@ impl Mapper for InesMapper000 {
 
     fn read(&self, addr: u16) -> u8 {
         match addr {
-            //0x6000..=0x7FFF => {
-            //    self.prg_ram[(addr - 0x6000) as usize]
-            //}
+            0x6000..=0x7FFF => {
+                self.prg_ram[(addr - 0x6000) as usize]
+            }
             // PRG-ROM
             0x8000..=0xFFFF => {
                 let prg_len = self.prg_rom.len();

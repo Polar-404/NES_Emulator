@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "debug_log")]
+use crate::cpu::cpu::CPU;
 use crate::{
     engine::instance::EmulatorInstance
 };

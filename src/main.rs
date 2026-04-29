@@ -1,20 +1,7 @@
 #![windows_subsystem = "windows"]
 
-mod cpu;
-mod memory;
-mod ppu;
-mod apu;
-mod engine;
-mod frontend;
-
-#[cfg(feature = "debug_log")]
-mod debug;
-
-#[macro_use]
-extern crate bitflags;
-
+use nes_emulator::frontend::app::App;
 use winit::event_loop::EventLoop;
-use frontend::app::App;
 
 fn main() {
     std::panic::set_hook(Box::new(|info| {

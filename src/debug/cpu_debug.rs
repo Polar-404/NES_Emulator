@@ -35,6 +35,19 @@ pub struct LoggerGuard<T: Display> {
 }
 
 impl<T: Display> LoggerGuard<T> {
+    pub fn save(&mut self) {
+        if let Ok(file) = std::fs::File::create(&self.path) {
+            let mut writer = std::io::BufWriter::new(file);
+            for item in &self.buffer {
+                let _ = writeln!(writer, "{}", item);
+            }
+            let _ = writer.flush();
+            println!("Logs saved at {} (via Drop)", self.path);
+        }
+    }
+}
+
+impl<T: Display> LoggerGuard<T> {
     pub fn new(buffer: VecDeque<T>, path: String,) -> Self {
         LoggerGuard {
             buffer,
@@ -45,14 +58,7 @@ impl<T: Display> LoggerGuard<T> {
 
 impl<T: Display> Drop for LoggerGuard<T> {
     fn drop(&mut self) {
-        if let Ok(file) = std::fs::File::create(&self.path) {
-            let mut writer = std::io::BufWriter::new(file);
-            for item in &self.buffer {
-                let _ = writeln!(writer, "{}", item);
-            }
-            let _ = writer.flush();
-            println!("Logs gravados em {} (via Drop)", self.path);
-        }
+        self.save();
     }
 }
 
@@ -109,11 +115,10 @@ pub fn cpu_logger(
 pub fn log_state_nestest(
     path: Option<&str>,
     size: usize,
-    mut stop_condition: impl FnMut(&mut CPU) -> bool + 'static,
 ) -> impl FnMut(&mut CPU) + 'static {
         
     let mut guard = LoggerGuard {
-        path: path.unwrap_or("cpu_log.txt").to_string(),
+        path: path.unwrap_or("cpu_log.log").to_string(),
         buffer: VecDeque::with_capacity(size)
     };
 
@@ -123,19 +128,15 @@ pub fn log_state_nestest(
         let opcode = cpu.last_opcode;
         
         let line = format!(
-            "{:04X}  {:02X}  A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} CYC:{}",
-            pc, opcode, cpu.register_a, cpu.register_x, cpu.register_y, 
-            cpu.status.bits(), cpu.stack_pointer, cpu.cycles
+            "{:04X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
+            pc, cpu.register_a, cpu.register_x, cpu.register_y, 
+            cpu.status.bits(), cpu.stack_pointer
         );
 
         if guard.buffer.len() >= size {
             guard.buffer.pop_front();
         }
         guard.buffer.push_back(line);
-
-        if stop_condition(cpu) {
-            panic!("Stop Condition met at (PC:{:04X} | Instruction:{:04X}).", cpu.program_counter, cpu.last_opcode);
-        }
     }
 }
 

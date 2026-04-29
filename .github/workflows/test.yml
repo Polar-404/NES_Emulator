@@ -1,0 +1,24 @@
+name: Rust Tests
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure rust cache
+        uses: Swatinem/rust-cache@v2
+
+      #since the project has visual libs, these has to be installed to run the tests at a linux env
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libasound2-dev libudev-dev
+
+      - name: Run tests
+        run: cargo test --verbose --features "debug_log"

@@ -30,7 +30,8 @@ impl EmulatorInstance {
         })
     }
 
-    pub fn run_frame(&mut self, audio: &mut Option<(AudioOutput, u32)>) {
+    #[cfg(feature = "debug_log")]
+    pub fn run_frame_with_debug_logger(&mut self, audio: &mut Option<(AudioOutput, u32)>, mut logger: impl FnMut(&mut CPU)) {
         self.cpu.bus.ppu.frame_complete = false;
 
         if self.is_paused { return; }
@@ -38,9 +39,27 @@ impl EmulatorInstance {
 
         while !self.cpu.bus.ppu.frame_complete {
             #[cfg(feature = "debug_log")]
-            let (_, cycles) = self.cpu.step_with_callback(Some(|cpu: &mut CPU| logger(cpu)));
+            let (halted, cycles) = self.cpu.step_with_callback(Some(|cpu: &mut CPU| logger(cpu)));
+            
+            if halted { 
+                self.is_halted = true; 
+                break;
+            };
 
-            #[cfg(not(feature = "debug_log"))]
+            if let Some(audio) = audio {
+                self.cpu.bus.sync_audio(cycles, audio);
+            }
+        }
+    }
+
+    pub fn run_frame(&mut self, audio: &mut Option<(AudioOutput, u32)>) {
+        self.cpu.bus.ppu.frame_complete = false;
+
+        if self.is_paused { return; }
+        if self.is_halted { return; }
+
+        while !self.cpu.bus.ppu.frame_complete {
+
             let (halted, cycles) = self.cpu.step();
             
             if halted { 
