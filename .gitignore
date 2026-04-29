@@ -1,7 +1,6 @@
 *.sublime-workspace
 nestest_output.log
 profile.json.gz
-nestest.log
 src/nestest_output.log
 .vscode/launch.json
 flamegraph.svg
