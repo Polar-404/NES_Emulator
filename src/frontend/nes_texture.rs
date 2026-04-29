@@ -1,7 +1,5 @@
 use glow::HasContext;
 
-use crate::engine::config::EmulatorConfig;
-
 pub struct NesTexture {
     pub gl_texture: glow::Texture,
     pub egui_texture_id: egui::TextureId,

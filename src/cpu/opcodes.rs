@@ -1,5 +1,5 @@
 use crate::cpu::cpu::AddressingMode;
-use std::{cell::OnceCell, collections::HashMap, sync::{Arc, OnceLock}};
+use std::{collections::HashMap, sync::{Arc, OnceLock}};
 
 #[allow(dead_code)]
 pub struct OpCode {

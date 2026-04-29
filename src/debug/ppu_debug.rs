@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter, Result};
-use std::io::Write;
 
 use crate::cpu::cpu::CPU;
 use crate::debug::cpu_debug::LoggerGuard;

@@ -70,7 +70,6 @@ impl Mapper for InesMapper163 {
             }
             0x6000..=0x7FFF => self.game_save.write(addr - 0x6000, val),
             _ => {}
-            _ => {}
         }
     }
 

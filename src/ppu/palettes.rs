@@ -1,4 +1,4 @@
-use std::{fmt::{Display, Error}, path::PathBuf};
+use std::{fmt::Display, path::PathBuf};
 
 use serde::{Serialize, Deserialize};
 

@@ -6,7 +6,6 @@ use glutin::{
 };
 
 use glutin_winit::DisplayBuilder;
-use glow::HasContext;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use winit::{

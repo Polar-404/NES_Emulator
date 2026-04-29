@@ -125,7 +125,6 @@ pub fn log_state_nestest(
     move |cpu: &mut CPU| {
 
         let pc = cpu.program_counter;
-        let opcode = cpu.last_opcode;
         
         let line = format!(
             "{:04X} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",

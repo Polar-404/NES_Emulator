@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::engine::config::EmulatorConfig;
-
 use crate::{
     cpu::cpu::CPU,
     engine::stats::PerfomanceStats,
@@ -13,7 +11,8 @@ pub struct EmulatorInstance {
     pub cpu: CPU,
     pub is_paused: bool,
     pub is_halted: bool,
-    stats: PerfomanceStats,
+    #[allow(unused)]
+    stats: PerfomanceStats, //TODO impl performance visualization with the new frontend
 }
 
 impl EmulatorInstance {
