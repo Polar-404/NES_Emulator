@@ -10,10 +10,13 @@
 </div>
 
 ## Showcase
+<div align="center">
+
 | Super Mario Bros. | Kirby's Adventure |
 | :---: | :---: |
-<img width="385" alt="Image" src="https://github.com/user-attachments/assets/20603cd5-cff6-4800-922b-20561797412f" /> | <img width="385" alt="Image" src="https://github.com/user-attachments/assets/dad57e11-a0f6-43f4-8ba6-d4dacc253fc9" />
+| <img width="385" src="https://github.com/user-attachments/assets/20603cd5-cff6-4800-922b-20561797412f" /> | <img width="385" src="https://github.com/user-attachments/assets/dad57e11-a0f6-43f4-8ba6-d4dacc253fc9" /> |
 
+</div>
 
 > [!NOTE] 
 > This project was created purely as a hobby, a personal challenge, and an opportunity to practice low-level programming and system architecture in Rust. So for the foreseeable future it is not intended to compete with established emulators but rather serves as a proof of concept and a deep learning experience regarding low-level programming and the NES hardware.
