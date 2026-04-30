@@ -12,7 +12,7 @@
 ## Showcase
 | Super Mario Bros. | Kirby's Adventure |
 | :---: | :---: |
-<img width="475" alt="Image" src="https://github.com/user-attachments/assets/20603cd5-cff6-4800-922b-20561797412f" /> | <img width="475" alt="Image" src="https://github.com/user-attachments/assets/dad57e11-a0f6-43f4-8ba6-d4dacc253fc9" />
+<img width="385" alt="Image" src="https://github.com/user-attachments/assets/20603cd5-cff6-4800-922b-20561797412f" /> | <img width="385" alt="Image" src="https://github.com/user-attachments/assets/dad57e11-a0f6-43f4-8ba6-d4dacc253fc9" />
 
 
 > [!NOTE] 
