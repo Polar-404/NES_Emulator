@@ -1,13 +1,18 @@
-# NES Emulator
+<div align="center">
+    
+# SelectNES
+
+[![Rust Tests](https://github.com/Polar-404/SelectNes/actions/workflows/test.yml/badge.svg)](https://github.com/Polar-404/SelectNes/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/Rust-Stable-orange.svg)](https://www.rust-lang.org/)
 
 **A Nintendo Entertainment System (NES) emulator built in Rust.**
+</div>
 
-![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white) ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
-
----
 ## Showcase
-
-<p align="center"> <img src="https://github.com/user-attachments/assets/5d8fd168-6763-4f93-9af5-1f9c4a570b58" alt="SMB Gameplay with Debug Info" width="600" /> </p>
+| Super Mario Bros. | Kirby's Adventure |
+| :---: | :---: |
+<img width="475" alt="Image" src="https://github.com/user-attachments/assets/20603cd5-cff6-4800-922b-20561797412f" /> | <img width="475" alt="Image" src="https://github.com/user-attachments/assets/dad57e11-a0f6-43f4-8ba6-d4dacc253fc9" />
 
 
 > [!NOTE] 
@@ -22,10 +27,10 @@ Make sure you have [Rust and Cargo](https://www.rust-lang.org/tools/install) ins
 ```bash
 
 # Clone the repository
-git clone https://github.com/Polar-404/NES_Emulator.git
+git clone https://github.com/Polar-404/SelectNES.git
 
 # Navigate to the directory
-cd NES_Emulator
+cd SelectNES
 
 # Compile and run
 cargo run --release
@@ -33,23 +38,16 @@ cargo run --release
 
 ## Controls
 
-| NES Button      | Primary |   Secondary   |
-| :-------------- | :-----: | :-----------: |
-| **D-Pad Up**    |   `W`   |  `Up Arrow`   |
-| **D-Pad Down**  |   `S`   | `Down Arrow`  |
-| **D-Pad Left**  |   `A`   | `Left Arrow`  |
-| **D-Pad Right** |   `D`   | `Right Arrow` |
-| **A**           |   `J`   |      `Z`      |
-| **B**           |   `K`   |      `X`      |
-| **Select**      |   `N`   |      `C`      |
-| **Start**       |   `M`   |      `V`      |
-
-**System Commands:**
-* **Volume Up:** `+`
-* **Volume Down:** `-` 
-* **Pause/Menu:** `Esc`
-* **Change Color Palette:** `.` (Period)
-* **Paste ROM Path:** `Ctrl + V`
+| NES Button      |    Primary    |
+| :-------------- | :-----------: |
+| **D-Pad Up**    |  `Up Arrow`   |
+| **D-Pad Down**  | `Down Arrow`  |
+| **D-Pad Left**  | `Left Arrow`  |
+| **D-Pad Right** | `Right Arrow` |
+| **A**           |      `Z`      |
+| **B**           |      `X`      |
+| **Select**      |      `C`      |
+| **Start**       |      `V`      |
 
 ---
 ## Current Features
@@ -67,38 +65,45 @@ cargo run --release
     - NROM (Mapper 0)
         
     - MMC1 (Mapper 1)
-        
+      
+    - MMC3 (Mapper 4)
+      
+- Debug Tools: (Pattern Table viewer, Palette viewer e Hex Memory viewer)
+
 
 ---
 ## Tech Stack
 
-- **[Rust](https://www.rust-lang.org/):** Main language used for the project.
-    
-- **[Macroquad](https://macroquad.rs/):** Core library for graphics rendering and input handling.
-    
-- **[Cpal](https://github.com/RustAudio/cpal):** Library for audio processing and output.
-    
-- **[Ringbuf](https://crates.io/crates/ringbuf):** Lock-free circular buffer for audio.
-    
-- **[Arboard](https://crates.io/crates/arboard):** System clipboard access.
-    
-- **Others:** `image`, `lazy_static`, `sysinfo`.
-    
+- **[Rust](https://www.rust-lang.org/):** Main language used for the project, ensuring memory safety and high performance.
 
+- **Graphics & UI:**
+  - **[Glow](https://github.com/grovesNL/glow):** "GL on Whatever" — used for cross-platform OpenGL bindings.
+  - **[Egui](https://github.com/emilk/egui):** Immediate mode GUI library used for the debugging tools (PPU, Memory, and CPU viewers).
+  - **OpenGL:** Low-level rendering for the NES screen and implementation of custom shaders.
+
+- **[Cpal](https://github.com/RustAudio/cpal):** Low-level library for audio processing and output.
+
+- **[Ringbuf](https://crates.io/crates/ringbuf):** Lock-free circular buffer for efficient audio synchronization.
+
+- **[Arboard](https://crates.io/crates/arboard):** Native system clipboard access for easy ROM path pasting.
+
+- **Others:** `image`, `rfd`, `serde`.
+
+  
 ---
 ## Roadmap / To-Do
 
 As this is an ongoing learning project, several areas still need improvement:
 
-- [ ] **User Interface:** Improve the start menu and add more graphics and audio configuration options.
+- [x] **User Interface:** Improve the start menu and add more graphics and audio configuration options.
     
 - [ ] **Audio (APU):** Implement the DMC (Delta Modulation Channel).
     
 - [ ] **Synchronization:** Sync audio with FPS to maintain a more stable frame rate, faithful to the original console.
     
-- [ ] **Mappers:** Add support for more mappers (e.g., MMC3) to increase game compatibility.
+- [ ] **Mappers:** Add support for more mappers to increase game compatibility.
     
-- [ ] **Saves:** Implement Save/Load states functionality.
+- [x] **Saves:** Implement Save/Load states functionality. (only in-game saves so far, saving the emulator state isn't implemented yet)
     
 - [ ] **Code Quality:** Refactor and clean up the codebase, and potentially add documentation and internationalization (EN/PT-BR).
     
@@ -108,14 +113,15 @@ As this is an ongoing learning project, several areas still need improvement:
     
 - [ ] **Scripting:** Implement user script support with Lua.
     
-- [ ] **More Palettes:** Implement the ability for the user to insert their own palettes via interface and/or a designated folder with  `.pal` files (maybe even `.hex` files).
+- [x] **More Palettes:** Implement the ability for the user to insert their own palettes via interface and/or a designated folder with  `.pal` files (maybe even `.hex` files).
 
-- [ ] **Custom Graphics Pipeline:** Transition from Macroquad to OpenGL/Glow for
+- [x] **Custom Graphics Pipeline:** Transition from Macroquad to OpenGL/Glow for
     - lower input latency
     - better frame synchronization.
     - Custom CRT/NTSC shaders.
     
 - [ ] **WebAssembly (WASM):** Browser-based emulation — play directly without installing anything.
+
 
 ---
 ## Acknowledgments & References
@@ -127,6 +133,7 @@ This project would not have been possible without the incredible emulation commu
 - **[javidx9 (OneLoneCoder)](https://www.youtube.com/@javidx9):** His excellent [video series on creating an NES emulator](https://youtube.com/playlist?list=PLrOv9FMX8xJHqMvSGB_9G9nZZ_4IgteYf&si=LfeRL_qWT_3-2GNt) was the starting point and main architectural inspiration.
     
 - **[bugzmanov/nes_ebook](https://github.com/bugzmanov/nes_ebook):** The e-book "Writing NES Emulator in Rust" was a fundamental reference. Parts of the CPU implementation and Design Patterns were heavily based on his code to understand Rust's nuances applied to emulation.
+
 
 ---
 ## Licenses
