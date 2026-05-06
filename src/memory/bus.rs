@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use crate::engine::console::{self, LogType};
-use crate::memory::mappers::InesMapper163;
 use crate::memory::{mappers, mapper_base::*};
 
 use crate::{
@@ -237,6 +236,8 @@ where T: Mapper + 'static {
     )
 }
 
+const NES_SIGNATURE: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
+
 /// Loads an iNES ROM file and returns the appropriate "mapper" for the cartridge.
 /// 
 /// The "Mappers" in this codebase are a customized 'struct/data format' with all the data of the cartridge on it
@@ -286,9 +287,18 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
 
     //reads the entire content of a file into a vector of bytes(which is excatly what i need)
     let rom_data = std::fs::read(path)?;
-    let mapper_match = (rom_data[7] & 0xF0) | (rom_data[6] >> 4);
+    let header = &rom_data[0..16];
 
-    let has_trainer = (rom_data[6] & 0b0000_0100) != 0;
+    let mapper_match = (header[7] & 0xF0) | (header[6] >> 4);
+
+    let has_trainer = (header[6] & 0b0000_0100) != 0;
+
+    if header[0..4] != NES_SIGNATURE {
+        console::print_logs(
+            LogType::Warning, 
+            format!("THE ROM HEADER DOESN'T HAVE A NES SIGNATURE, THIS ROM MIGHT BE INVALID")
+        );
+    }
 
     console::print_logs(LogType::Info, format!("--- ROM HEADER INFO ---"));
     console::print_logs(LogType::Info, format!("Byte 4 (PRG Banks): {}", rom_data[4]));
@@ -328,8 +338,9 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
     match mapper_match {
         0 =>    Ok(wrap_in_pointers(mappers::InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
         1 =>    Ok(wrap_in_pointers(mappers::InesMapper001::new(prg_rom_data, chr_rom_data, GameSave::new(path)))),
+        2 =>    Ok(wrap_in_pointers(mappers::InesMapper002::new(prg_rom_data, mirroring_type, GameSave::new(path)))),
         4 =>    Ok(wrap_in_pointers(mappers::InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
-        163 =>  Ok(wrap_in_pointers(InesMapper163::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
+        163 =>  Ok(wrap_in_pointers(mappers::InesMapper163::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
 
         _ => Err(format!("Mapper {} is not supported yet", mapper_match).into())
     }
