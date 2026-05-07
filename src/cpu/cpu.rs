@@ -1,6 +1,8 @@
 // The main (and, as far as I know, only) difference between the Ricoh 2A03 used in the NES and the MOS 6502 is that the 20A4 has integrated audio.
 // Since I haven't implemented audio, this effectively becomes a general-purpose 6502 microchip emulator. (except by the BUS, and NMI)
 
+use serde::Deserialize;
+
 use crate::cpu::opcodes::{self, opcodes_map};
 use crate::engine::console::{LogType, print_logs};
 use crate::memory::bus::BUS; 
@@ -69,7 +71,7 @@ pub struct CPU {
     pub last_opcode: u8,
     is_halted: bool
 }
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
     Immediate,
