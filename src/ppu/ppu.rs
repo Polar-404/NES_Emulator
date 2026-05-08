@@ -206,7 +206,7 @@ impl PPU {
                 result
             }
 
-            _ => panic!("Program tried to read register ${:?}", (addr & 0x07)),
+            _ => self.data_buffer
 
         }
     }
