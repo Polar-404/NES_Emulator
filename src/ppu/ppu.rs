@@ -261,7 +261,7 @@ impl PPU {
                     self.w = true
                 } else {
                     self.t.addr = val as u16 | (self.t.addr & 0xFF00);
-                    self.v = self.t;
+                    self.v.addr = self.t.addr & 0x3FFF;
                     self.w = false
                 }
             }
