@@ -70,8 +70,8 @@ pub struct InesMapper004 {
     irq_counter: u8,
     irq_latch: u8,
     irq_enabled: bool,
-    irq_pending: bool,    // <- flag que o bus vai ler
-    irq_reload: bool,     // força recarga no próximo clock A12
+    irq_pending: bool,
+    irq_reload: bool,
 
     last_a12: bool,
     a12_low_counter: u32,
@@ -129,10 +129,8 @@ impl InesMapper004 {
             }
             0xC000..=0xDFFF => {
                 if !prg_mode {
-                    // Modo 0: Penúltimo banco fixo aqui
                     (total_banks - 2) * 8192 + (addr as usize & 0x1FFF)
                 } else {
-                    // Modo 1: R6 mapeia aqui
                     (self.bank_registers[6] as usize) * 8192 + (addr as usize & 0x1FFF)
                 }
             }
@@ -298,28 +296,24 @@ impl Mapper for InesMapper004 {
         self.irq_pending
     }
 
-    ///notifies the cartridge of the current scanline and updates if the cpu should trigger an "IRQ"
     fn notify_ppu_address(&mut self, addr: u16) {
         let a12 = addr & 0x1000 != 0;
 
         if !a12 {
-            // Incrementa enquanto a linha estiver baixa
             self.a12_low_counter += 1;
         } else {
-            // Só dispara se for uma borda de subida E se a linha ficou baixa o suficiente
-            if !self.last_a12 && self.a12_low_counter >= 3 {
-                
+            if !self.last_a12 {
                 if self.irq_counter == 0 || self.irq_reload {
                     self.irq_counter = self.irq_latch;
                     self.irq_reload = false;
                 } else {
                     self.irq_counter -= 1;
-                    if self.irq_counter == 0 && self.irq_enabled {
-                        self.irq_pending = true;
-                    }
+                }
+
+                if self.irq_counter == 0 && self.irq_enabled {
+                    self.irq_pending = true;
                 }
             }
-            // Zera o contador porque a linha A12 agora é 1
             self.a12_low_counter = 0;
         }
         
