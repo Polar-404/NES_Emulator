@@ -12,6 +12,7 @@ use crate::{
 };
 
 use ringbuf::traits::{Observer as _, Producer as _};
+use ringbuf::wrap;
 
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -314,6 +315,13 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
 
     let chr_size = rom_data[5] as usize * 0x2000; // then I take the chr size, which is at byte 5
 
+    let has_persistent_storage = if (rom_data[6] & 0x02) != 0 { true } else { false };
+    let mapper_save_path = if has_persistent_storage {
+        Some(path)
+    } else {
+        None
+    };
+
     let prg_rom_start = 16 + if has_trainer {512} else {0}; //the header size is 16 bytes
     let prg_rom_end = prg_rom_start + program_size; 
     let prg_rom_data = rom_data[prg_rom_start..prg_rom_end].into(); // mapping the actual game
@@ -321,24 +329,21 @@ pub fn load_rom_from_file(path: &Path) -> Result<Rc<RefCell<dyn Mapper>>, Box<dy
     //The CHR ROM starts after the PRG ROM
     let chr_rom_data = rom_data[prg_rom_end..(prg_rom_end + chr_size)].into();
     
-    //mirroring type
-    let mirroring_byte = rom_data[6] & 0b0000_0001;
     let mirroring_type: Mirroring;
 
-    if (mirroring_byte >> 3) & 0b0000_0001 == 1 {
+    if (rom_data[6] & 0x08) != 0 {
         todo!("FOUR SCREEN BIT")
+    } else if (rom_data[6] & 0x01) != 0 {
+        mirroring_type = Mirroring::Vertical;
     } else {
-        if mirroring_byte == 0 {
-            mirroring_type = Mirroring::Horizontal
-        } else {
-            mirroring_type = Mirroring::Vertical
-        }
+        mirroring_type = Mirroring::Horizontal;
     }
 
     match mapper_match {
         0 =>    Ok(wrap_in_pointers(mappers::InesMapper000::new(prg_rom_data, chr_rom_data, mirroring_type))),
         1 =>    Ok(wrap_in_pointers(mappers::InesMapper001::new(prg_rom_data, chr_rom_data, GameSave::new(path)))),
         2 =>    Ok(wrap_in_pointers(mappers::InesMapper002::new(prg_rom_data, mirroring_type, GameSave::new(path)))),
+        3 =>    Ok(wrap_in_pointers(mappers::InesMapper003::new(prg_rom_data, chr_rom_data, mirroring_type, mapper_save_path))),
         4 =>    Ok(wrap_in_pointers(mappers::InesMapper004::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
         163 =>  Ok(wrap_in_pointers(mappers::InesMapper163::new(prg_rom_data, chr_rom_data, mirroring_type, GameSave::new(path)))),
 
